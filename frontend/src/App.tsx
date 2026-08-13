@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api, Pipeline, PipelineStats, FailureAnalysis, Notification } from './api'
+import { 
+  LayoutDashboard, GitBranch, Bot, History, Bell, Bug, CheckCircle, 
+  Package, TrendingUp, Timer, Rocket, XCircle, Hourglass, RefreshCw, FileText
+} from 'lucide-react'
 
 // ==================== App Component ====================
 export default function App() {
@@ -48,50 +52,50 @@ export default function App() {
         <nav className="sidebar-nav">
           <button className={`nav-item ${page === 'dashboard' ? 'active' : ''}`}
                   onClick={() => setPage('dashboard')}>
-            <span className="nav-icon">📊</span>
+            <span className="nav-icon"><LayoutDashboard size={20} /></span>
             <span>Dashboard</span>
           </button>
           <button className={`nav-item ${page === 'pipelines' || page === 'pipeline-detail' ? 'active' : ''}`}
                   onClick={() => setPage('pipelines')}>
-            <span className="nav-icon">🔄</span>
+            <span className="nav-icon"><GitBranch size={20} /></span>
             <span>Pipelines</span>
           </button>
           <button className={`nav-item ${page === 'failures' || page === 'analysis-detail' ? 'active' : ''}`}
                   onClick={() => setPage('failures')}>
-            <span className="nav-icon">🤖</span>
+            <span className="nav-icon"><Bot size={20} /></span>
             <span>AI Analysis</span>
           </button>
           <button className={`nav-item ${page === 'history' ? 'active' : ''}`}
                   onClick={() => setPage('history')}>
-            <span className="nav-icon">📋</span>
+            <span className="nav-icon"><History size={20} /></span>
             <span>History</span>
           </button>
           <button className={`nav-item ${page === 'notifications' ? 'active' : ''}`}
                   onClick={() => setPage('notifications')}>
-            <span className="nav-icon">🔔</span>
+            <span className="nav-icon"><Bell size={20} /></span>
             <span>Notifications {unreadCount > 0 && `(${unreadCount})`}</span>
           </button>
         </nav>
 
         {/* Simulate Button in Sidebar */}
         <div style={{ padding: '12px', borderTop: '1px solid var(--border-subtle)' }}>
-          <button className="btn btn-danger" style={{ width: '100%', justifyContent: 'center' }}
+          <button className="btn btn-danger" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   onClick={async () => {
                     try {
                       await api.simulatePush(true)
-                      showToast('🚀 Webhook Sent', 'Simulated a push with a bug. Watch the pipeline flow!')
-                    } catch { showToast('❌ Error', 'Failed to simulate push') }
+                      showToast('Webhook Sent', 'Simulated a push with a bug. Watch the pipeline flow!')
+                    } catch { showToast('Error', 'Failed to simulate push') }
                   }}>
-            💥 Simulate Bug
+            <Bug size={16} style={{ marginRight: 8 }} /> Simulate Bug
           </button>
-          <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 8, justifyContent: 'center' }}
+          <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   onClick={async () => {
                     try {
                       await api.simulatePush(false)
-                      showToast('🚀 Webhook Sent', 'Simulated a clean push. Build should succeed!')
-                    } catch { showToast('❌ Error', 'Failed to simulate push') }
+                      showToast('Webhook Sent', 'Simulated a clean push. Build should succeed!')
+                    } catch { showToast('Error', 'Failed to simulate push') }
                   }}>
-            ✅ Clean Push
+            <CheckCircle size={16} style={{ marginRight: 8 }} /> Clean Push
           </button>
         </div>
       </aside>
@@ -156,32 +160,32 @@ function DashboardPage({ onNavigatePipeline }: { onNavigatePipeline: (id: string
       {/* Stats */}
       <div className="stats-grid">
         <div className="stat-card blue">
-          <div className="stat-icon">📦</div>
+          <div className="stat-icon"><Package size={24} /></div>
           <div className="stat-value">{stats?.total ?? 0}</div>
           <div className="stat-label">Total Pipelines</div>
         </div>
         <div className="stat-card green">
-          <div className="stat-icon">✅</div>
+          <div className="stat-icon"><CheckCircle size={24} /></div>
           <div className="stat-value">{stats?.successful ?? 0}</div>
           <div className="stat-label">Successful</div>
         </div>
         <div className="stat-card red">
-          <div className="stat-icon">❌</div>
+          <div className="stat-icon"><XCircle size={24} /></div>
           <div className="stat-value">{stats?.failed ?? 0}</div>
           <div className="stat-label">Failed</div>
         </div>
         <div className="stat-card yellow">
-          <div className="stat-icon">📈</div>
+          <div className="stat-icon"><TrendingUp size={24} /></div>
           <div className="stat-value">{stats?.failureRate ?? 0}%</div>
           <div className="stat-label">Failure Rate</div>
         </div>
         <div className="stat-card purple">
-          <div className="stat-icon">⏱️</div>
+          <div className="stat-icon"><Timer size={24} /></div>
           <div className="stat-value">{stats?.averageBuildTimeMs ? `${(stats.averageBuildTimeMs / 1000).toFixed(1)}s` : '—'}</div>
           <div className="stat-label">Avg Build Time</div>
         </div>
         <div className="stat-card blue">
-          <div className="stat-icon">🤖</div>
+          <div className="stat-icon"><Bot size={24} /></div>
           <div className="stat-value">{stats?.resolved ?? 0}</div>
           <div className="stat-label">AI Resolved</div>
         </div>
@@ -194,7 +198,7 @@ function DashboardPage({ onNavigatePipeline }: { onNavigatePipeline: (id: string
         </div>
         {pipelines.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon">🚀</div>
+            <div className="empty-state-icon"><Rocket size={48} /></div>
             <p>No pipelines yet. Click "Simulate Bug" to trigger the demo flow!</p>
           </div>
         ) : (
@@ -310,8 +314,8 @@ function PipelineDetailPage({ id, onBack, onViewAnalysis }: { id: string; onBack
           <p className="page-subtitle">{pipeline.repository} / {pipeline.branch}</p>
         </div>
         {(pipeline.status === 'FAILED' || pipeline.status === 'ANALYZING' || pipeline.status === 'RESOLVED') && (
-          <button className="btn btn-primary" onClick={() => onViewAnalysis(pipeline.id)}>
-            🤖 View AI Analysis
+          <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center' }} onClick={() => onViewAnalysis(pipeline.id)}>
+            <Bot size={16} style={{ marginRight: 8 }} /> View AI Analysis
           </button>
         )}
       </div>
@@ -345,14 +349,18 @@ function PipelineDetailPage({ id, onBack, onViewAnalysis }: { id: string; onBack
 
       {pipeline.testResults && (
         <div className="card" style={{ marginBottom: 20 }}>
-          <h3 style={{ marginBottom: 12, fontSize: 16 }}>📋 Test Results</h3>
+          <h3 style={{ marginBottom: 12, fontSize: 16, display: 'flex', alignItems: 'center' }}>
+            <FileText size={16} style={{ marginRight: 8 }} /> Test Results
+          </h3>
           <div className="code-block">{pipeline.testResults}</div>
         </div>
       )}
 
       {pipeline.buildLog && (
         <div className="card">
-          <h3 style={{ marginBottom: 12, fontSize: 16 }}>📄 Build Log</h3>
+          <h3 style={{ marginBottom: 12, fontSize: 16, display: 'flex', alignItems: 'center' }}>
+            <FileText size={16} style={{ marginRight: 8 }} /> Build Log
+          </h3>
           <div className="log-viewer">{colorizeLog(pipeline.buildLog)}</div>
         </div>
       )}
@@ -409,7 +417,7 @@ function FailuresPage({ onNavigate }: { onNavigate: (pipelineId: string) => void
 
       {failures.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon">🤖</div>
+          <div className="empty-state-icon"><Bot size={48} /></div>
           <p>No failure analyses yet. Trigger a failing build to see AI analysis!</p>
         </div>
       ) : (
@@ -471,7 +479,7 @@ function AnalysisDetailPage({ pipelineId, onBack }: { pipelineId: string; onBack
     <div>
       <button className="back-link" onClick={onBack}>← Back</button>
       <div className="empty-state">
-        <div className="empty-state-icon">⏳</div>
+        <div className="empty-state-icon"><Hourglass size={48} /></div>
         <p>AI analysis is still in progress. This page will auto-refresh...</p>
       </div>
     </div>
@@ -489,7 +497,7 @@ function AnalysisDetailPage({ pipelineId, onBack }: { pipelineId: string; onBack
 
       <div className="analysis-panel">
         <div className="analysis-header">
-          <div className="analysis-icon">🤖</div>
+          <div className="analysis-icon"><Bot size={32} /></div>
           <div style={{ flex: 1 }}>
             <h2 style={{ fontSize: 22, fontWeight: 700 }}>AI Root Cause Analysis</h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
@@ -578,7 +586,7 @@ function NotificationsPage({ onRefreshCount }: { onRefreshCount: () => void }) {
       </div>
       {notifications.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon">🔔</div>
+          <div className="empty-state-icon"><Bell size={48} /></div>
           <p>No notifications yet.</p>
         </div>
       ) : (
@@ -609,10 +617,15 @@ function NotificationsPage({ onRefreshCount }: { onRefreshCount: () => void }) {
 
 function StatusBadge({ status }: { status: string }) {
   const cls = `badge badge-${status.toLowerCase()}`
-  const icons: Record<string, string> = {
-    QUEUED: '⏳', RUNNING: '🔄', SUCCESS: '✅', FAILED: '❌', ANALYZING: '🤖', RESOLVED: '✅'
+  const icons: Record<string, React.ReactNode> = {
+    QUEUED: <Hourglass size={14} style={{ marginRight: 4 }} />,
+    RUNNING: <RefreshCw size={14} style={{ marginRight: 4 }} />,
+    SUCCESS: <CheckCircle size={14} style={{ marginRight: 4 }} />,
+    FAILED: <XCircle size={14} style={{ marginRight: 4 }} />,
+    ANALYZING: <Bot size={14} style={{ marginRight: 4 }} />,
+    RESOLVED: <CheckCircle size={14} style={{ marginRight: 4 }} />
   }
-  return <span className={cls}>{icons[status] || '•'} {status}</span>
+  return <span className={cls} style={{ display: 'inline-flex', alignItems: 'center' }}>{icons[status] || '•'} {status}</span>
 }
 
 function SeverityBadge({ severity }: { severity: string }) {
