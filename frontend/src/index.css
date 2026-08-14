@@ -57,9 +57,14 @@
   --shadow-glow-green: 0 0 25px rgba(16, 185, 129, 0.2);
   --specular-inner: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 
-  /* Easing */
-  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-haptic: cubic-bezier(0.25, 1, 0.5, 1);
+  /* Emil Kowalski Animation Tokens — exact values, never approximated */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);      /* strong ease-out for entrances/exits */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);  /* on-screen movement */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);   /* iOS-like drawer (Ionic) */
+
+  /* Legacy aliases kept for backward compat */
+  --ease-spring: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-haptic: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /* ==================== Reset & Global Settings ==================== */
@@ -776,13 +781,27 @@ tr:last-child td {
   font-weight: 600;
   cursor: pointer;
   border: 1px solid transparent;
-  transition: all 0.2s var(--ease-spring);
+  /* Separate props — never transition: all */
+  transition:
+    transform 160ms var(--ease-out),
+    opacity 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out),
+    background-color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out);
   font-family: var(--font-sans);
   user-select: none;
 }
 
+/* Press feedback — purpose: Feedback. Frequency: occasional buttons = eligible */
 .btn:active {
-  transform: scale(0.97) translateY(1px);
+  transform: scale(0.97);
+}
+
+/* Gate hover motion to pointer devices — touch fires false hovers on tap */
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover { transform: translateY(-1px); }
+  .btn-danger:hover  { transform: translateY(-1px); }
+  .btn-ghost:hover   { transform: translateY(-1px); }
 }
 
 .btn-primary {
@@ -1199,6 +1218,8 @@ tr:last-child td {
 }
 
 /* ==================== Floating Toast ==================== */
+/* Toast — purpose: Preventing a jarring change. Frequency: occasional = eligible.
+   Recipe: enter from bottom edge, exit same edge. ease (not ease-out) per Sonner. */
 .toast {
   position: fixed;
   bottom: 28px;
@@ -1211,7 +1232,19 @@ tr:last-child td {
   backdrop-filter: blur(20px);
   z-index: 1000;
   max-width: 380px;
-  animation: toast-slide 0.3s var(--ease-spring);
+
+  /* Transition (not keyframe) so rapid triggers retarget smoothly */
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease;
+
+  /* @starting-style: entry animation purely from CSS — no JS mount flag needed */
+  @starting-style {
+    opacity: 0;
+    transform: translateY(100%);
+  }
 }
 
 .toast-title {
@@ -1227,11 +1260,6 @@ tr:last-child td {
   font-size: 13px;
   color: var(--text-secondary);
   margin-top: 4px;
-}
-
-@keyframes toast-slide {
-  from { transform: translateY(24px) scale(0.95); opacity: 0; }
-  to { transform: translateY(0) scale(1); opacity: 1; }
 }
 
 /* ==================== Mobile Responsiveness ==================== */
@@ -1257,5 +1285,269 @@ tr:last-child td {
   }
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ==========================================================================
+   Emil Kowalski Animation Layer
+   Purposeful motion only. Every rule here passes the Gate:
+   frequency → purpose → speed → function.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   @keyframes shared vocabulary
+   -------------------------------------------------------------------------- */
+
+/* Entrance: scale(0.96) + opacity — never scale(0) per the skill */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Pulse ring for live status indicators */
+@keyframes radar-pulse {
+  0%   { transform: scale(0.95); opacity: 0.8; }
+  50%  { transform: scale(1.3);  opacity: 1;   }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+/* Spinner — predetermined motion, CSS animation runs off main thread */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Badge alive pulse for RUNNING / ANALYZING states */
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1;    transform: scale(1);    }
+  50%       { opacity: 0.75; transform: scale(0.98); }
+}
+
+/* --------------------------------------------------------------------------
+   1. Stat cards — stagger entrance.
+   Purpose: Preventing a jarring change (6 cards teleporting in at once).
+   Frequency: Occasional (dashboard load, not per-keystroke).
+   Duration: 300ms — within budget. Stagger: 40ms increments.
+   -------------------------------------------------------------------------- */
+.stats-grid .stat-card {
+  animation: fadeUp 300ms var(--ease-out) both;
+}
+.stats-grid .stat-card:nth-child(1) { animation-delay: 0ms; }
+.stats-grid .stat-card:nth-child(2) { animation-delay: 40ms; }
+.stats-grid .stat-card:nth-child(3) { animation-delay: 80ms; }
+.stats-grid .stat-card:nth-child(4) { animation-delay: 120ms; }
+.stats-grid .stat-card:nth-child(5) { animation-delay: 160ms; }
+.stats-grid .stat-card:nth-child(6) { animation-delay: 200ms; }
+
+/* Stat card hover — gated to pointer, only transform+opacity */
+@media (hover: hover) and (pointer: fine) {
+  .stat-card:hover {
+    transform: translateY(-3px);
+    transition:
+      transform 200ms var(--ease-out),
+      border-color 200ms var(--ease-out),
+      box-shadow 200ms var(--ease-out);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   2. Sidebar nav items — staggered entrance.
+   Purpose: Spatial consistency (items appear in reading order, not all at once).
+   Frequency: Occasional (app load, not per-click).
+   -------------------------------------------------------------------------- */
+.nav-item {
+  animation: fadeUp 250ms var(--ease-out) both;
+}
+.sidebar-nav .nav-item:nth-child(1) { animation-delay: 30ms; }
+.sidebar-nav .nav-item:nth-child(2) { animation-delay: 60ms; }
+.sidebar-nav .nav-item:nth-child(3) { animation-delay: 90ms; }
+.sidebar-nav .nav-item:nth-child(4) { animation-delay: 120ms; }
+.sidebar-nav .nav-item:nth-child(5) { animation-delay: 150ms; }
+
+/* Nav item hover transition — gated, only named props */
+@media (hover: hover) and (pointer: fine) {
+  .nav-item:hover {
+    transition:
+      transform 150ms var(--ease-out),
+      background-color 150ms var(--ease-out),
+      border-color 150ms var(--ease-out),
+      color 150ms var(--ease-out);
+    transform: translateX(2px);
+  }
+}
+
+/* Active indicator — state indication purpose */
+.nav-item.active {
+  transition:
+    background 200ms var(--ease-out),
+    border-color 200ms var(--ease-out),
+    box-shadow 200ms var(--ease-out);
+}
+
+/* --------------------------------------------------------------------------
+   3. Table rows — subtle entrance stagger.
+   Purpose: Preventing jarring change when data streams in.
+   Frequency: Occasional (each load/refresh). Max 10 rows on screen.
+   Stagger stops animating after 300ms total — interaction never blocked.
+   -------------------------------------------------------------------------- */
+tbody tr {
+  animation: fadeUp 220ms var(--ease-out) both;
+}
+tbody tr:nth-child(1)  { animation-delay: 0ms; }
+tbody tr:nth-child(2)  { animation-delay: 25ms; }
+tbody tr:nth-child(3)  { animation-delay: 50ms; }
+tbody tr:nth-child(4)  { animation-delay: 75ms; }
+tbody tr:nth-child(5)  { animation-delay: 100ms; }
+tbody tr:nth-child(6)  { animation-delay: 125ms; }
+tbody tr:nth-child(7)  { animation-delay: 150ms; }
+tbody tr:nth-child(8)  { animation-delay: 175ms; }
+
+/* Row hover — gated, exact props */
+@media (hover: hover) and (pointer: fine) {
+  tbody tr.clickable-row:hover td {
+    transition: background-color 150ms var(--ease-out);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   4. Back link hover — Feedback purpose. Tens/day but near-imperceptible.
+   Subtle translateX only, 150ms — within the sub-200ms budget.
+   -------------------------------------------------------------------------- */
+@media (hover: hover) and (pointer: fine) {
+  .back-link:hover {
+    transition:
+      transform 150ms var(--ease-out),
+      color 150ms var(--ease-out);
+    transform: translateX(-3px);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   5. Notification item hover — Feedback. Occasional interaction.
+   translateX only, 150ms.
+   -------------------------------------------------------------------------- */
+@media (hover: hover) and (pointer: fine) {
+  .notification-item:hover {
+    transition:
+      transform 150ms var(--ease-out),
+      background-color 150ms var(--ease-out),
+      border-color 150ms var(--ease-out);
+    transform: translateX(4px);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   6. DAG node circles — State indication.
+   Glow transition on status change. Not frequent — data-driven on load.
+   -------------------------------------------------------------------------- */
+.dag-circle {
+  transition:
+    border-color 250ms var(--ease-out),
+    box-shadow 250ms var(--ease-out),
+    background-color 250ms var(--ease-out),
+    color 250ms var(--ease-out);
+}
+
+.dag-connector {
+  transition: background 400ms var(--ease-out), box-shadow 400ms var(--ease-out);
+}
+
+/* --------------------------------------------------------------------------
+   7. Confidence bar fill — State indication (score animating in).
+   Purpose: Making a data value legible. Single, deliberate animation on load.
+   -------------------------------------------------------------------------- */
+.confidence-bar-fill {
+  transition: width 800ms var(--ease-in-out);
+}
+
+/* --------------------------------------------------------------------------
+   8. Bezel card hover — purpose: Preventing jarring change.
+   Only transform + border + shadow, gated to pointer.
+   -------------------------------------------------------------------------- */
+@media (hover: hover) and (pointer: fine) {
+  .bezel-card:hover {
+    transition:
+      transform 200ms var(--ease-out),
+      border-color 200ms var(--ease-out),
+      box-shadow 200ms var(--ease-out);
+    transform: translateY(-2px);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   9. Badge transitions — State indication.
+   Color/opacity only, no transform, because badges are dense UI.
+   -------------------------------------------------------------------------- */
+.badge {
+  transition:
+    opacity 160ms var(--ease-out),
+    background-color 200ms var(--ease-out),
+    border-color 200ms var(--ease-out);
+}
+
+/* --------------------------------------------------------------------------
+   REDUCED MOTION OVERRIDE (ships with every animation — not a follow-up)
+   Keep opacity transitions that aid comprehension; remove movement.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  /* Kill all transform-based animation */
+  .stats-grid .stat-card,
+  .nav-item,
+  tbody tr {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Replace movement with a simple fade */
+  .stats-grid .stat-card,
+  .nav-item,
+  tbody tr {
+    transition: opacity 200ms ease;
+  }
+
+  /* Kill the live pulse — keep the dot visible but static */
+  .pulse-dot {
+    animation: none;
+  }
+
+  /* Kill badge pulse — keep badge visible */
+  .badge-running,
+  .badge-analyzing {
+    animation: none;
+  }
+
+  /* Simplify the spinner to a static ring */
+  .spinner {
+    animation: none;
+    opacity: 0.5;
+  }
+
+  /* Toast: keep opacity fade, drop translateY */
+  .toast {
+    transition: opacity 200ms ease;
+    @starting-style { opacity: 0; transform: none; }
+  }
+
+  /* Remove hover transforms everywhere */
+  .stat-card:hover,
+  .bezel-card:hover,
+  .back-link:hover,
+  .notification-item:hover,
+  .nav-item:hover,
+  .btn-primary:hover,
+  .btn-danger:hover,
+  .btn-ghost:hover {
+    transform: none;
+  }
+
+  /* Keep the confidence bar fill visible, just no transition */
+  .confidence-bar-fill {
+    transition: none;
   }
 }
