@@ -25,17 +25,221 @@ An event-driven microservices platform that automatically detects, analyzes, and
 
 ---
 
-## Architecture
+## System Design & Architecture
 
+### 1. High-Level Event-Driven Architecture
+
+```mermaid
+flowchart TD
+    subgraph External["External Triggers & Ingress"]
+        Dev["fa:fa-user Developer / CI Runner"]
+        Git["fa:fa-github GitHub / GitLab Push"]
+        Sim["fa:fa-play Simulation Engine"]
+    end
+
+    subgraph GatewayLayer["Gateway & Routing Layer"]
+        GW["API Gateway (:8080)<br/>• Spring Cloud Gateway<br/>• Rate Limiting & Auth<br/>• Route Reverse Proxy"]
+    end
+
+    subgraph Microservices["Microservices Mesh (Spring Boot 3.3)"]
+        WH["Webhook Service (:8081)<br/>• HMAC-SHA256 Validator<br/>• Payload Parser"]
+        PS["Pipeline Service (:8082)<br/>• Lifecycle State Machine<br/>• Pipeline Orchestration"]
+        BW["Build Worker (:8083)<br/>• Job Execution<br/>• Log & Surefire Extractor"]
+        AI["AI Analyzer (:8084)<br/>• Root Cause Diagnostic<br/>• AST & Log Extraction<br/>• Fix Generator"]
+        FS["Failure Service (:8085)<br/>• History & Fingerprints<br/>• Analytics & Stats"]
+        NS["Notification Service (:8086)<br/>• WebSocket Dispatcher<br/>• Alert Formatter"]
+    end
+
+    subgraph EventBus["Apache Kafka (KRaft Event Bus :9092)"]
+        T1["Topic: code-events<br/>(CODE_PUSHED)"]
+        T2["Topic: pipeline-events<br/>(PIPELINE_STARTED)"]
+        T3["Topic: build-events<br/>(BUILD_SUCCEEDED / BUILD_FAILED)"]
+        T4["Topic: ai-analysis-events<br/>(AI_ANALYSIS_COMPLETED)"]
+        T5["Topic: notification-events<br/>(NOTIFICATION_CREATED)"]
+        T6["Topic: dead-letter-events<br/>(DEAD_LETTER)"]
+    end
+
+    subgraph StateStorage["Persistence & Caching"]
+        PG[("PostgreSQL (:5432)<br/>• pipelines<br/>• failure_analyses<br/>• failure_history<br/>• notifications")]
+        RD[("Redis (:6379)<br/>• Status & Fingerprint Cache<br/>• Distributed Locks<br/>• Rate Limits & Deduplication")]
+    end
+
+    subgraph ExternalAI["AI Intelligence Providers"]
+        LLM["LLM Engine<br/>• OpenAI GPT-4o / Claude 3.5<br/>• Pluggable Mock Fallback"]
+    end
+
+    subgraph Presentation["Frontend & Observability"]
+        UI["React + TypeScript UI (:3000)<br/>• OLED Dark Glass HUD<br/>• Real-time Telemetry & DAG<br/>• Interactive Diagnostic Studio"]
+        KUI["Kafka UI (:8090)<br/>• Cluster & Topic Monitor"]
+    end
+
+    %% Ingress Flow
+    Git -->|Webhook POST| GW
+    Sim -->|Simulate POST| GW
+    Dev -->|View UI| UI
+    GW -->|Route /webhooks| WH
+    GW -->|Route /pipelines| PS
+    GW -->|Route /failures| FS
+    GW -->|Route /notifications| NS
+
+    %% Event Flow
+    WH -->|Publish CODE_PUSHED| T1
+    T1 -->|Consume| PS
+    PS -->|Publish PIPELINE_STARTED| T2
+    T2 -->|Consume| BW
+    BW -->|Publish BUILD_FAILED / SUCCEEDED| T3
+    T3 -->|Consume BUILD_FAILED| AI
+    T3 -->|Consume status| PS
+
+    %% AI Analysis Flow
+    AI -->|Query Fingerprint| RD
+    AI -->|Prompt Diagnostic| LLM
+    LLM -->|Structured AST Analysis| AI
+    AI -->|Publish AI_ANALYSIS_COMPLETED| T4
+    T4 -->|Update Status to RESOLVED| PS
+    T4 -->|Persist Analysis| FS
+    T4 -->|Format Alert| NS
+    NS -->|Publish| T5
+
+    %% State & Persistence
+    PS <--->|Read/Write State| PG
+    FS <--->|Store Analysis| PG
+    NS <--->|Store Notifications| PG
+    PS <--->|Locks & Status Cache| RD
+    WH <--->|Deduplication| RD
+
+    %% UI & WebSocket
+    NS -.->|Real-time Alerts| UI
+    UI <--->|REST API / Live Sync| GW
+    EventBus -.->|Telemetry| KUI
 ```
-GitHub Push → Webhook Service → Kafka → Pipeline Service → Build Worker
-                                                              ↓
-                                                        Kafka (build-events)
-                                                              ↓
-Dashboard ← Notification Service ← Kafka ← AI Analyzer → Redis (cache)
-                                              ↓
-                                    Failure Service → PostgreSQL
+
+---
+
+### 2. End-to-End Failure Intelligence Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev as Developer / GitHub
+    participant GW as API Gateway (:8080)
+    participant WH as Webhook Service (:8081)
+    participant K as Apache Kafka
+    participant PS as Pipeline Service (:8082)
+    participant BW as Build Worker (:8083)
+    participant AI as AI Analyzer (:8084)
+    participant LLM as OpenAI / Claude / Mock
+    participant FS as Failure Service (:8085)
+    participant NS as Notification Service (:8086)
+    participant DB as PostgreSQL
+    participant RD as Redis
+    actor UI as React Dashboard (:3000)
+
+    Dev->>GW: POST /api/webhooks/github (or simulate)
+    GW->>WH: Validate HMAC-SHA256 & Route
+    WH->>RD: Check Webhook Idempotency (Deduplication)
+    WH->>K: Publish event: CODE_PUSHED (topic: code-events)
+    
+    K->>PS: Consume CODE_PUSHED
+    PS->>DB: Insert Pipeline Record (status: QUEUED)
+    PS->>RD: Cache Pipeline Status (TTL 1h)
+    PS->>K: Publish event: PIPELINE_STARTED (topic: pipeline-events)
+
+    K->>BW: Consume PIPELINE_STARTED
+    BW->>PS: Update Status (status: RUNNING)
+    BW->>BW: Execute Maven Compile & Surefire Tests
+    Note over BW: Test Fails: NullPointerException in PaymentService
+    BW->>K: Publish event: BUILD_FAILED (topic: build-events)
+
+    par Parallel Event Distribution
+        K->>PS: Consume BUILD_FAILED -> Set status: ANALYZING
+        K->>AI: Consume BUILD_FAILED (logs + stack trace)
+    end
+
+    AI->>RD: Check Failure Fingerprint Cache
+    alt Cache Miss
+        AI->>LLM: Send Structured Prompt (logs, error trace, affected files)
+        LLM-->>AI: Return JSON (Root cause, Confidence 92%, Code Patch)
+        AI->>RD: Cache Fingerprint & Fix (TTL 24h)
+    end
+
+    AI->>K: Publish event: AI_ANALYSIS_COMPLETED (topic: ai-analysis-events)
+
+    par Fan-Out Processing
+        K->>PS: Update Pipeline -> Status: RESOLVED
+        K->>FS: Persist Failure Diagnosis & History to DB
+        K->>NS: Create Notification Alert
+    end
+
+    FS->>DB: Save to failure_analyses & failure_history
+    NS->>DB: Save Notification
+    NS->>UI: Dispatch Real-Time Alert Event
+    UI->>GW: GET /api/pipelines & /api/failures
+    GW-->>UI: Return Live Telemetry & AI Diagnostic HUD
+    Note over UI: UI displays 92% Confidence, Root Cause & Suggested Code Fix
 ```
+
+---
+
+### 3. Database Entity Relationship Model
+
+```mermaid
+erDiagram
+    PIPELINES ||--o| FAILURE_ANALYSES : "diagnosed by"
+    PIPELINES ||--o{ FAILURE_HISTORY : "tracks"
+    PIPELINES ||--o{ NOTIFICATIONS : "triggers"
+
+    PIPELINES {
+        uuid id PK "Pipeline Identifier"
+        varchar repository "Repository Name"
+        varchar branch "Git Branch"
+        varchar commit_sha "Commit Hash"
+        varchar author "Author Name"
+        varchar status "QUEUED | RUNNING | SUCCESS | FAILED | ANALYZING | RESOLVED"
+        text build_log "Standard Console Output"
+        text test_results "Surefire XML Summary"
+        text error_message "Extracted Error Line"
+        bigint duration_ms "Build Duration Milliseconds"
+        timestamp started_at "Start Timestamp"
+        timestamp completed_at "Completion Timestamp"
+        timestamp created_at "Created Timestamp"
+    }
+
+    FAILURE_ANALYSES {
+        uuid id PK "Analysis Identifier"
+        uuid pipeline_id FK "Associated Pipeline ID"
+        varchar failure_type "TEST_FAILURE | COMPILATION_ERROR | RUNTIME_ERROR"
+        text root_cause "Detailed Root Cause"
+        decimal confidence "Confidence Score (0.00 - 1.00)"
+        text affected_files "JSON Array of File Paths"
+        text explanation "Comprehensive Diagnostic"
+        text suggested_fix "Suggested Code Patch"
+        varchar severity "LOW | MEDIUM | HIGH | CRITICAL"
+        timestamp created_at "Created Timestamp"
+    }
+
+    FAILURE_HISTORY {
+        uuid id PK "History Record ID"
+        uuid pipeline_id FK "Associated Pipeline ID"
+        varchar failure_fingerprint "SHA-256 Signature Hash"
+        varchar failure_type "Failure Category"
+        varchar severity "Severity Level"
+        boolean resolved "Resolution Status"
+        timestamp created_at "Created Timestamp"
+    }
+
+    NOTIFICATIONS {
+        uuid id PK "Notification Identifier"
+        uuid pipeline_id FK "Target Pipeline ID"
+        varchar type "AI_ANALYSIS | BUILD_STATUS"
+        varchar title "Alert Headline"
+        text message "Alert Content"
+        varchar severity "Severity Flag"
+        boolean read "Read Status"
+        timestamp created_at "Created Timestamp"
+    }
+```
+
 
 ### Services
 
