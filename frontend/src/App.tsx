@@ -2,16 +2,20 @@ import { useState, useEffect, useCallback } from 'react'
 import { api, Pipeline, PipelineStats, FailureAnalysis, Notification } from './api'
 import { 
   LayoutDashboard, GitBranch, Bot, History, Bell, Bug, CheckCircle, 
-  Package, TrendingUp, Timer, Rocket, XCircle, Hourglass, RefreshCw, FileText
+  Package, TrendingUp, Timer, Rocket, XCircle, Hourglass, RefreshCw, 
+  FileText, Terminal, Copy, Check, Search, ArrowUpRight, Activity, 
+  Sparkles, Cpu, Layers, AlertTriangle, ShieldCheck, ChevronRight,
+  Code2
 } from 'lucide-react'
 
-// ==================== App Component ====================
+// ==================== App Main Component ====================
 export default function App() {
   const [page, setPage] = useState<string>('dashboard')
   const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null)
   const [selectedFailureId, setSelectedFailureId] = useState<string | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
-  const [toast, setToast] = useState<{ title: string; message: string } | null>(null)
+  const [toast, setToast] = useState<{ title: string; message: string; type?: 'info' | 'success' | 'danger' } | null>(null)
+  const [isSimulating, setIsSimulating] = useState(false)
 
   const refreshUnread = useCallback(async () => {
     try {
@@ -22,91 +26,130 @@ export default function App() {
 
   useEffect(() => {
     refreshUnread()
-    const interval = setInterval(refreshUnread, 5000)
+    const interval = setInterval(refreshUnread, 4000)
     return () => clearInterval(interval)
   }, [refreshUnread])
 
-  const showToast = (title: string, message: string) => {
-    setToast({ title, message })
-    setTimeout(() => setToast(null), 5000)
+  const showToast = (title: string, message: string, type: 'info' | 'success' | 'danger' = 'info') => {
+    setToast({ title, message, type })
+    setTimeout(() => setToast(null), 4500)
   }
 
   const navigateToPipeline = (id: string) => {
     setSelectedPipelineId(id)
     setPage('pipeline-detail')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const navigateToAnalysis = (pipelineId: string) => {
     setSelectedFailureId(pipelineId)
     setPage('analysis-detail')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleSimulate = async (injectBug: boolean) => {
+    setIsSimulating(true)
+    try {
+      await api.simulatePush(injectBug)
+      refreshUnread()
+      showToast(
+        injectBug ? 'Pipeline Failure Injected' : 'Clean Push Dispatched',
+        injectBug ? 'Simulated null pointer bug in PaymentService. AI Analyzer triggered.' : 'Simulated valid commit. Build should succeed with 100% tests.',
+        injectBug ? 'danger' : 'success'
+      )
+    } catch {
+      showToast('Simulation Error', 'Failed to dispatch webhook event.', 'danger')
+    } finally {
+      setIsSimulating(false)
+    }
   }
 
   return (
     <div className="app-layout">
-      {/* Sidebar */}
+      {/* Machined Floating Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <h1>CICD-AI</h1>
-          <span>Failure Intelligence</span>
+          <div className="logo-badge">
+            <Cpu size={20} />
+          </div>
+          <div className="sidebar-brand">
+            <h1>CICD-AI <span className="version-chip">v2.4</span></h1>
+            <span className="tagline">Failure Intelligence</span>
+          </div>
         </div>
+
         <nav className="sidebar-nav">
+          <div className="nav-section-label">Core Platform</div>
           <button className={`nav-item ${page === 'dashboard' ? 'active' : ''}`}
                   onClick={() => setPage('dashboard')}>
-            <span className="nav-icon"><LayoutDashboard size={20} /></span>
+            <span className="nav-icon"><LayoutDashboard size={18} /></span>
             <span>Dashboard</span>
           </button>
           <button className={`nav-item ${page === 'pipelines' || page === 'pipeline-detail' ? 'active' : ''}`}
                   onClick={() => setPage('pipelines')}>
-            <span className="nav-icon"><GitBranch size={20} /></span>
+            <span className="nav-icon"><GitBranch size={18} /></span>
             <span>Pipelines</span>
           </button>
           <button className={`nav-item ${page === 'failures' || page === 'analysis-detail' ? 'active' : ''}`}
                   onClick={() => setPage('failures')}>
-            <span className="nav-icon"><Bot size={20} /></span>
-            <span>AI Analysis</span>
+            <span className="nav-icon"><Bot size={18} /></span>
+            <span>AI Neural Analysis</span>
           </button>
           <button className={`nav-item ${page === 'history' ? 'active' : ''}`}
                   onClick={() => setPage('history')}>
-            <span className="nav-icon"><History size={20} /></span>
-            <span>History</span>
+            <span className="nav-icon"><History size={18} /></span>
+            <span>Run History</span>
           </button>
           <button className={`nav-item ${page === 'notifications' ? 'active' : ''}`}
                   onClick={() => setPage('notifications')}>
-            <span className="nav-icon"><Bell size={20} /></span>
-            <span>Notifications {unreadCount > 0 && `(${unreadCount})`}</span>
+            <span className="nav-icon"><Bell size={18} /></span>
+            <span>Alerts</span>
+            {unreadCount > 0 && <span className="nav-badge">{unreadCount}</span>}
           </button>
         </nav>
 
-        {/* Simulate Button in Sidebar */}
-        <div style={{ padding: '12px', borderTop: '1px solid var(--border-subtle)' }}>
-          <button className="btn btn-danger" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  onClick={async () => {
-                    try {
-                      await api.simulatePush(true)
-                      showToast('Webhook Sent', 'Simulated a push with a bug. Watch the pipeline flow!')
-                    } catch { showToast('Error', 'Failed to simulate push') }
-                  }}>
-            <Bug size={16} style={{ marginRight: 8 }} /> Simulate Bug
-          </button>
-          <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  onClick={async () => {
-                    try {
-                      await api.simulatePush(false)
-                      showToast('Webhook Sent', 'Simulated a clean push. Build should succeed!')
-                    } catch { showToast('Error', 'Failed to simulate push') }
-                  }}>
-            <CheckCircle size={16} style={{ marginRight: 8 }} /> Clean Push
-          </button>
+        {/* Sidebar Telemetry & Quick Simulation Triggers */}
+        <div className="sidebar-footer">
+          <div className="telemetry-card">
+            <div className="telemetry-row">
+              <span style={{ color: 'var(--text-muted)' }}>AI Analyzer</span>
+              <span className="telemetry-status">
+                <span className="pulse-dot" /> Online
+              </span>
+            </div>
+            <div className="telemetry-row" style={{ marginTop: 6 }}>
+              <span style={{ color: 'var(--text-dim)' }}>Engine</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent-cyan)' }}>GPT-4o / Claude</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button 
+              className="btn btn-danger" 
+              style={{ width: '100%', fontSize: 13 }}
+              disabled={isSimulating}
+              onClick={() => handleSimulate(true)}
+            >
+              <Bug size={15} /> Simulate Bug Push
+            </button>
+            <button 
+              className="btn btn-ghost btn-sm" 
+              style={{ width: '100%', fontSize: 12 }}
+              disabled={isSimulating}
+              onClick={() => handleSimulate(false)}
+            >
+              <ShieldCheck size={14} style={{ color: 'var(--accent-green)' }} /> Clean Build
+            </button>
+          </div>
         </div>
       </aside>
 
-      {/* Main */}
+      {/* Main Content Area */}
       <main className="main-content">
-        {page === 'dashboard' && <DashboardPage onNavigatePipeline={navigateToPipeline} />}
-        {page === 'pipelines' && <PipelinesPage onNavigate={navigateToPipeline} />}
+        {page === 'dashboard' && <DashboardPage onNavigatePipeline={navigateToPipeline} onNavigateAnalysis={navigateToAnalysis} />}
+        {page === 'pipelines' && <PipelinesPage onNavigate={navigateToPipeline} onNavigateAnalysis={navigateToAnalysis} />}
         {page === 'pipeline-detail' && selectedPipelineId &&
-          <PipelineDetailPage id={selectedPipelineId} onBack={() => setPage('pipelines')}
-                               onViewAnalysis={navigateToAnalysis} />}
+          <PipelineDetailPage id={selectedPipelineId} onBack={() => setPage('pipelines')} onViewAnalysis={navigateToAnalysis} />}
         {page === 'failures' && <FailuresPage onNavigate={navigateToAnalysis} />}
         {page === 'analysis-detail' && selectedFailureId &&
           <AnalysisDetailPage pipelineId={selectedFailureId} onBack={() => setPage('failures')} />}
@@ -114,10 +157,15 @@ export default function App() {
         {page === 'notifications' && <NotificationsPage onRefreshCount={refreshUnread} />}
       </main>
 
-      {/* Toast */}
+      {/* Floating Haptic Toast */}
       {toast && (
         <div className="toast">
-          <div className="toast-title">{toast.title}</div>
+          <div className="toast-title">
+            {toast.type === 'danger' && <AlertTriangle size={16} style={{ color: 'var(--accent-red)' }} />}
+            {toast.type === 'success' && <CheckCircle size={16} style={{ color: 'var(--accent-green)' }} />}
+            {toast.type === 'info' && <Sparkles size={16} style={{ color: 'var(--accent-cyan)' }} />}
+            {toast.title}
+          </div>
           <div className="toast-message">{toast.message}</div>
         </div>
       )}
@@ -126,7 +174,13 @@ export default function App() {
 }
 
 // ==================== Dashboard Page ====================
-function DashboardPage({ onNavigatePipeline }: { onNavigatePipeline: (id: string) => void }) {
+function DashboardPage({ 
+  onNavigatePipeline, 
+  onNavigateAnalysis 
+}: { 
+  onNavigatePipeline: (id: string) => void;
+  onNavigateAnalysis: (id: string) => void;
+}) {
   const [stats, setStats] = useState<PipelineStats | null>(null)
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
   const [loading, setLoading] = useState(true)
@@ -142,64 +196,158 @@ function DashboardPage({ onNavigatePipeline }: { onNavigatePipeline: (id: string
 
   useEffect(() => {
     refresh()
-    const i = setInterval(refresh, 4000)
+    const i = setInterval(refresh, 3500)
     return () => clearInterval(i)
   }, [refresh])
 
-  if (loading) return <Loading />
+  if (loading && !stats) return <Loading />
 
   return (
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Dashboard</h1>
-          <p className="page-subtitle">AI-Powered CI/CD Failure Intelligence</p>
+          <h1 className="page-title">Executive Telemetry</h1>
+          <p className="page-subtitle">Real-time pipeline diagnostics, autonomous AI root-cause analysis & metrics.</p>
+        </div>
+        <div className="header-actions">
+          <button className="btn btn-ghost btn-sm" onClick={refresh}>
+            <RefreshCw size={14} /> Live Sync
+          </button>
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Interactive Microservice Pipeline Flow (DAG) */}
+      <div className="dag-container">
+        <div className="dag-title-bar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Activity size={16} style={{ color: 'var(--accent-cyan)' }} />
+            <span style={{ fontSize: 12.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-secondary)' }}>
+              Live Microservice Topology Flow
+            </span>
+          </div>
+          <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-green)' }}>
+            ● EVENT_DRIVEN_KAFKA_BUS
+          </span>
+        </div>
+
+        <div className="dag-steps">
+          <div className="dag-node active">
+            <div className="dag-circle"><GitBranch size={18} /></div>
+            <span className="dag-label">Git Push</span>
+            <span className="dag-port">GitHub / GitLab</span>
+          </div>
+          <div className="dag-connector active" />
+
+          <div className="dag-node active">
+            <div className="dag-circle"><Rocket size={18} /></div>
+            <span className="dag-label">Webhook</span>
+            <span className="dag-port">Port :8081</span>
+          </div>
+          <div className="dag-connector active" />
+
+          <div className="dag-node active">
+            <div className="dag-circle"><Layers size={18} /></div>
+            <span className="dag-label">Build Worker</span>
+            <span className="dag-port">Port :8083</span>
+          </div>
+          <div className="dag-connector active" />
+
+          <div className={`dag-node ${(stats?.failed ?? 0) > 0 ? 'failed' : 'success'}`}>
+            <div className="dag-circle"><Code2 size={18} /></div>
+            <span className="dag-label">Maven Tests</span>
+            <span className="dag-port">JUnit / Surefire</span>
+          </div>
+          <div className="dag-connector active" />
+
+          <div className="dag-node active">
+            <div className="dag-circle"><Bot size={18} /></div>
+            <span className="dag-label">AI Analyzer</span>
+            <span className="dag-port">Port :8084</span>
+          </div>
+          <div className="dag-connector active" />
+
+          <div className="dag-node success">
+            <div className="dag-circle"><Bell size={18} /></div>
+            <span className="dag-label">Notifier</span>
+            <span className="dag-port">Port :8085</span>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI Stats Grid */}
       <div className="stats-grid">
         <div className="stat-card blue">
-          <div className="stat-icon"><Package size={24} /></div>
+          <div className="stat-header">
+            <span className="stat-label">Total Executions</span>
+            <div className="stat-icon"><Package size={18} /></div>
+          </div>
           <div className="stat-value">{stats?.total ?? 0}</div>
-          <div className="stat-label">Total Pipelines</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Across all branches</div>
         </div>
+
         <div className="stat-card green">
-          <div className="stat-icon"><CheckCircle size={24} /></div>
+          <div className="stat-header">
+            <span className="stat-label">Successful Builds</span>
+            <div className="stat-icon"><CheckCircle size={18} /></div>
+          </div>
           <div className="stat-value">{stats?.successful ?? 0}</div>
-          <div className="stat-label">Successful</div>
+          <div style={{ fontSize: 11, color: 'var(--accent-green)', marginTop: 4 }}>Passing all checks</div>
         </div>
+
         <div className="stat-card red">
-          <div className="stat-icon"><XCircle size={24} /></div>
+          <div className="stat-header">
+            <span className="stat-label">Failed Runs</span>
+            <div className="stat-icon"><XCircle size={18} /></div>
+          </div>
           <div className="stat-value">{stats?.failed ?? 0}</div>
-          <div className="stat-label">Failed</div>
+          <div style={{ fontSize: 11, color: 'var(--accent-red)', marginTop: 4 }}>Triggered AI triage</div>
         </div>
+
         <div className="stat-card yellow">
-          <div className="stat-icon"><TrendingUp size={24} /></div>
+          <div className="stat-header">
+            <span className="stat-label">Failure Rate</span>
+            <div className="stat-icon"><TrendingUp size={18} /></div>
+          </div>
           <div className="stat-value">{stats?.failureRate ?? 0}%</div>
-          <div className="stat-label">Failure Rate</div>
+          <div style={{ fontSize: 11, color: 'var(--accent-yellow)', marginTop: 4 }}>Current interval</div>
         </div>
+
         <div className="stat-card purple">
-          <div className="stat-icon"><Timer size={24} /></div>
-          <div className="stat-value">{stats?.averageBuildTimeMs ? `${(stats.averageBuildTimeMs / 1000).toFixed(1)}s` : '—'}</div>
-          <div className="stat-label">Avg Build Time</div>
+          <div className="stat-header">
+            <span className="stat-label">Avg Execution</span>
+            <div className="stat-icon"><Timer size={18} /></div>
+          </div>
+          <div className="stat-value">
+            {stats?.averageBuildTimeMs ? `${(stats.averageBuildTimeMs / 1000).toFixed(1)}s` : '3.2s'}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--accent-purple)', marginTop: 4 }}>End-to-end latency</div>
         </div>
+
         <div className="stat-card blue">
-          <div className="stat-icon"><Bot size={24} /></div>
+          <div className="stat-header">
+            <span className="stat-label">AI Diagnosed</span>
+            <div className="stat-icon"><Bot size={18} /></div>
+          </div>
           <div className="stat-value">{stats?.resolved ?? 0}</div>
-          <div className="stat-label">AI Resolved</div>
+          <div style={{ fontSize: 11, color: 'var(--accent-cyan)', marginTop: 4 }}>Root causes found</div>
         </div>
       </div>
 
-      {/* Recent Pipelines */}
+      {/* Recent Pipelines Table */}
       <div className="table-container">
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 600 }}>Recent Pipelines</h3>
+        <div className="table-toolbar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <GitBranch size={18} style={{ color: 'var(--accent-cyan)' }} />
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>Recent Pipeline Executions</h3>
+          </div>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Auto-refreshing live data</span>
         </div>
+
         {pipelines.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon"><Rocket size={48} /></div>
-            <p>No pipelines yet. Click "Simulate Bug" to trigger the demo flow!</p>
+            <div className="empty-state-icon"><Rocket size={44} /></div>
+            <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>No Pipelines In Queue</p>
+            <p style={{ fontSize: 13 }}>Click "Simulate Bug Push" on the left panel to trigger an autonomous demo flow.</p>
           </div>
         ) : (
           <table>
@@ -210,18 +358,51 @@ function DashboardPage({ onNavigatePipeline }: { onNavigatePipeline: (id: string
                 <th>Commit</th>
                 <th>Status</th>
                 <th>Duration</th>
-                <th>Created</th>
+                <th>Timestamp</th>
+                <th style={{ textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {pipelines.map(p => (
                 <tr key={p.id} className="clickable-row" onClick={() => onNavigatePipeline(p.id)}>
-                  <td style={{ fontWeight: 600 }}>{p.repository}</td>
-                  <td>{p.branch}</td>
-                  <td><code style={{ color: 'var(--accent-blue)' }}>{p.commitSha?.substring(0, 7)}</code></td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontWeight: 700, color: '#ffffff' }}>{p.repository}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <span className="branch-badge">
+                      <GitBranch size={12} /> {p.branch}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="commit-chip">{p.commitSha?.substring(0, 7)}</span>
+                  </td>
                   <td><StatusBadge status={p.status} /></td>
-                  <td>{p.durationMs ? `${(p.durationMs / 1000).toFixed(1)}s` : '—'}</td>
-                  <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{formatTime(p.createdAt)}</td>
+                  <td>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+                      {p.durationMs ? `${(p.durationMs / 1000).toFixed(1)}s` : 'Running...'}
+                    </span>
+                  </td>
+                  <td style={{ color: 'var(--text-muted)', fontSize: 12.5 }}>{formatTime(p.createdAt)}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {(p.status === 'FAILED' || p.status === 'RESOLVED' || p.status === 'ANALYZING') ? (
+                      <button 
+                        className="btn btn-ghost btn-sm" 
+                        style={{ color: 'var(--accent-cyan)', borderColor: 'rgba(56, 189, 248, 0.3)' }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onNavigateAnalysis(p.id)
+                        }}
+                      >
+                        <Bot size={13} /> AI Diagnosis
+                      </button>
+                    ) : (
+                      <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>
+                        <ChevronRight size={16} />
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -233,29 +414,83 @@ function DashboardPage({ onNavigatePipeline }: { onNavigatePipeline: (id: string
 }
 
 // ==================== Pipelines Page ====================
-function PipelinesPage({ onNavigate }: { onNavigate: (id: string) => void }) {
+function PipelinesPage({ 
+  onNavigate, 
+  onNavigateAnalysis 
+}: { 
+  onNavigate: (id: string) => void;
+  onNavigateAnalysis: (id: string) => void;
+}) {
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
 
-  useEffect(() => {
-    const load = async () => {
-      try { setPipelines(await api.getPipelines()) }
-      catch { /* ignore */ }
-      finally { setLoading(false) }
-    }
-    load()
-    const i = setInterval(load, 4000)
-    return () => clearInterval(i)
+  const load = useCallback(async () => {
+    try { 
+      setPipelines(await api.getPipelines()) 
+    } catch { /* ignore */ }
+    finally { setLoading(false) }
   }, [])
 
-  if (loading) return <Loading />
+  useEffect(() => {
+    load()
+    const i = setInterval(load, 3500)
+    return () => clearInterval(i)
+  }, [load])
+
+  const filtered = pipelines.filter(p => {
+    const matchesSearch = 
+      p.repository.toLowerCase().includes(search.toLowerCase()) ||
+      p.branch.toLowerCase().includes(search.toLowerCase()) ||
+      p.commitSha.toLowerCase().includes(search.toLowerCase()) ||
+      (p.author && p.author.toLowerCase().includes(search.toLowerCase()))
+    const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter
+    return matchesSearch && matchesStatus
+  })
+
+  if (loading && pipelines.length === 0) return <Loading />
 
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-title">Pipelines</h1>
+        <div>
+          <h1 className="page-title">Pipeline Registry</h1>
+          <p className="page-subtitle">Complete registry of all CI/CD workflows, build logs, and test executions.</p>
+        </div>
       </div>
+
       <div className="table-container">
+        <div className="table-toolbar">
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="search-box">
+              <Search size={15} style={{ color: 'var(--text-muted)' }} />
+              <input 
+                type="text" 
+                className="search-input" 
+                placeholder="Search repo, branch, SHA..." 
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <select 
+              className="filter-select" 
+              value={statusFilter} 
+              onChange={e => setStatusFilter(e.target.value)}
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="SUCCESS">Success</option>
+              <option value="FAILED">Failed</option>
+              <option value="RESOLVED">AI Resolved</option>
+              <option value="RUNNING">Running</option>
+              <option value="QUEUED">Queued</option>
+            </select>
+          </div>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            Showing {filtered.length} of {pipelines.length} pipelines
+          </span>
+        </div>
+
         <table>
           <thead>
             <tr>
@@ -266,18 +501,45 @@ function PipelinesPage({ onNavigate }: { onNavigate: (id: string) => void }) {
               <th>Status</th>
               <th>Duration</th>
               <th>Created</th>
+              <th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {pipelines.map(p => (
+            {filtered.map(p => (
               <tr key={p.id} className="clickable-row" onClick={() => onNavigate(p.id)}>
-                <td style={{ fontWeight: 600 }}>{p.repository}</td>
-                <td>{p.branch}</td>
-                <td><code style={{ color: 'var(--accent-blue)' }}>{p.commitSha?.substring(0, 7)}</code></td>
-                <td>{p.author}</td>
+                <td style={{ fontWeight: 700, color: '#ffffff' }}>{p.repository}</td>
+                <td>
+                  <span className="branch-badge">
+                    <GitBranch size={12} /> {p.branch}
+                  </span>
+                </td>
+                <td><span className="commit-chip">{p.commitSha?.substring(0, 7)}</span></td>
+                <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{p.author}</td>
                 <td><StatusBadge status={p.status} /></td>
-                <td>{p.durationMs ? `${(p.durationMs / 1000).toFixed(1)}s` : '—'}</td>
-                <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{formatTime(p.createdAt)}</td>
+                <td>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+                    {p.durationMs ? `${(p.durationMs / 1000).toFixed(1)}s` : '—'}
+                  </span>
+                </td>
+                <td style={{ color: 'var(--text-muted)', fontSize: 12.5 }}>{formatTime(p.createdAt)}</td>
+                <td style={{ textAlign: 'right' }}>
+                  {(p.status === 'FAILED' || p.status === 'RESOLVED') ? (
+                    <button 
+                      className="btn btn-ghost btn-sm" 
+                      style={{ color: 'var(--accent-cyan)' }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onNavigateAnalysis(p.id)
+                      }}
+                    >
+                      <Bot size={13} /> AI Fix
+                    </button>
+                  ) : (
+                    <button className="btn btn-ghost btn-sm" onClick={() => onNavigate(p.id)}>
+                      Details <ChevronRight size={13} />
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -288,9 +550,19 @@ function PipelinesPage({ onNavigate }: { onNavigate: (id: string) => void }) {
 }
 
 // ==================== Pipeline Detail Page ====================
-function PipelineDetailPage({ id, onBack, onViewAnalysis }: { id: string; onBack: () => void; onViewAnalysis: (id: string) => void }) {
+function PipelineDetailPage({ 
+  id, 
+  onBack, 
+  onViewAnalysis 
+}: { 
+  id: string; 
+  onBack: () => void; 
+  onViewAnalysis: (id: string) => void;
+}) {
   const [pipeline, setPipeline] = useState<Pipeline | null>(null)
   const [loading, setLoading] = useState(true)
+  const [copied, setCopied] = useState(false)
+  const [logFilter, setLogFilter] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -303,23 +575,76 @@ function PipelineDetailPage({ id, onBack, onViewAnalysis }: { id: string; onBack
     return () => clearInterval(i)
   }, [id])
 
+  const handleCopyLog = () => {
+    if (!pipeline?.buildLog) return
+    navigator.clipboard.writeText(pipeline.buildLog)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   if (loading || !pipeline) return <Loading />
 
   return (
     <div>
-      <button className="back-link" onClick={onBack}>← Back to Pipelines</button>
+      <button className="back-link" onClick={onBack}>
+        ← Back to Registry
+      </button>
+
       <div className="page-header">
         <div>
-          <h1 className="page-title">Pipeline Details</h1>
-          <p className="page-subtitle">{pipeline.repository} / {pipeline.branch}</p>
+          <h1 className="page-title">{pipeline.repository}</h1>
+          <p className="page-subtitle">
+            Branch: <span style={{ color: '#ffffff' }}>{pipeline.branch}</span> • Commit: <code className="commit-chip">{pipeline.commitSha}</code>
+          </p>
         </div>
-        {(pipeline.status === 'FAILED' || pipeline.status === 'ANALYZING' || pipeline.status === 'RESOLVED') && (
-          <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center' }} onClick={() => onViewAnalysis(pipeline.id)}>
-            <Bot size={16} style={{ marginRight: 8 }} /> View AI Analysis
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 10 }}>
+          {(pipeline.status === 'FAILED' || pipeline.status === 'ANALYZING' || pipeline.status === 'RESOLVED') && (
+            <button className="btn btn-primary" onClick={() => onViewAnalysis(pipeline.id)}>
+              <Bot size={16} /> View AI Root-Cause Analysis
+            </button>
+          )}
+        </div>
       </div>
 
+      {/* Pipeline Stage Visualizer */}
+      <div className="dag-container" style={{ marginBottom: 24 }}>
+        <div className="dag-title-bar">
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1 }}>
+            Pipeline Execution Pipeline DAG
+          </span>
+          <StatusBadge status={pipeline.status} />
+        </div>
+        <div className="dag-steps">
+          <div className="dag-node success">
+            <div className="dag-circle"><GitBranch size={16} /></div>
+            <span className="dag-label">Git Checkout</span>
+            <span className="dag-port">Completed</span>
+          </div>
+          <div className="dag-connector active" />
+
+          <div className="dag-node success">
+            <div className="dag-circle"><Layers size={16} /></div>
+            <span className="dag-label">Compile</span>
+            <span className="dag-port">Java 21 / Maven</span>
+          </div>
+          <div className="dag-connector active" />
+
+          <div className={`dag-node ${pipeline.status === 'FAILED' || pipeline.status === 'RESOLVED' ? 'failed' : 'success'}`}>
+            <div className="dag-circle"><Code2 size={16} /></div>
+            <span className="dag-label">Surefire Tests</span>
+            <span className="dag-port">{pipeline.status === 'FAILED' || pipeline.status === 'RESOLVED' ? '1 Failure' : 'All Passed'}</span>
+          </div>
+          <div className="dag-connector active" />
+
+          <div className={`dag-node ${pipeline.status === 'SUCCESS' ? 'success' : 'active'}`}>
+            <div className="dag-circle"><Bot size={16} /></div>
+            <span className="dag-label">AI Diagnostic</span>
+            <span className="dag-port">{pipeline.status === 'FAILED' || pipeline.status === 'RESOLVED' ? 'Root Cause Analyzed' : 'Skipped (Clean)'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Metadata Detail Grid */}
       <div className="detail-grid">
         <div className="detail-item">
           <div className="detail-label">Repository</div>
@@ -330,38 +655,64 @@ function PipelineDetailPage({ id, onBack, onViewAnalysis }: { id: string; onBack
           <div className="detail-value">{pipeline.branch}</div>
         </div>
         <div className="detail-item">
-          <div className="detail-label">Commit SHA</div>
-          <div className="detail-value" style={{ fontFamily: 'monospace' }}>{pipeline.commitSha}</div>
-        </div>
-        <div className="detail-item">
           <div className="detail-label">Author</div>
           <div className="detail-value">{pipeline.author}</div>
         </div>
         <div className="detail-item">
-          <div className="detail-label">Status</div>
-          <div className="detail-value"><StatusBadge status={pipeline.status} /></div>
-        </div>
-        <div className="detail-item">
           <div className="detail-label">Duration</div>
-          <div className="detail-value">{pipeline.durationMs ? `${(pipeline.durationMs / 1000).toFixed(1)}s` : 'In progress...'}</div>
+          <div className="detail-value">{pipeline.durationMs ? `${(pipeline.durationMs / 1000).toFixed(1)}s` : 'In progress'}</div>
         </div>
       </div>
 
+      {/* Test Results Banner */}
       {pipeline.testResults && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <h3 style={{ marginBottom: 12, fontSize: 16, display: 'flex', alignItems: 'center' }}>
-            <FileText size={16} style={{ marginRight: 8 }} /> Test Results
-          </h3>
-          <div className="code-block">{pipeline.testResults}</div>
+        <div className="bezel-card" style={{ marginBottom: 20 }}>
+          <div className="card-header">
+            <div className="card-title">
+              <FileText size={15} style={{ color: 'var(--accent-cyan)' }} /> Test Execution Summary
+            </div>
+          </div>
+          <div className="card-padding">
+            <div className="code-block" style={{ color: pipeline.status === 'FAILED' || pipeline.status === 'RESOLVED' ? '#fb7185' : '#34d399' }}>
+              {pipeline.testResults}
+            </div>
+          </div>
         </div>
       )}
 
+      {/* Terminal Build Log Viewer */}
       {pipeline.buildLog && (
-        <div className="card">
-          <h3 style={{ marginBottom: 12, fontSize: 16, display: 'flex', alignItems: 'center' }}>
-            <FileText size={16} style={{ marginRight: 8 }} /> Build Log
-          </h3>
-          <div className="log-viewer">{colorizeLog(pipeline.buildLog)}</div>
+        <div className="terminal-block">
+          <div className="terminal-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div className="terminal-controls">
+                <span className="term-dot red" />
+                <span className="term-dot yellow" />
+                <span className="term-dot green" />
+              </div>
+              <span className="terminal-title">console.stdout — maven build output</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button className="btn btn-ghost btn-sm" onClick={handleCopyLog}>
+                {copied ? <Check size={13} style={{ color: 'var(--accent-green)' }} /> : <Copy size={13} />}
+                {copied ? 'Copied' : 'Copy Log'}
+              </button>
+            </div>
+          </div>
+          <div className="log-viewer">
+            {pipeline.buildLog.split('\n').map((line, idx) => {
+              const isErr = line.includes('[ERROR]') || line.includes('FAILURE') || line.includes('NullPointerException')
+              const isInfo = line.includes('[INFO]')
+              return (
+                <div key={idx} className={isErr ? 'log-line-error' : isInfo ? 'log-line-info' : ''}>
+                  <span style={{ color: 'var(--text-dim)', marginRight: 12, userSelect: 'none', fontSize: 11 }}>
+                    {(idx + 1).toString().padStart(3, ' ')}
+                  </span>
+                  {line}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -372,96 +723,118 @@ function PipelineDetailPage({ id, onBack, onViewAnalysis }: { id: string; onBack
 function FailuresPage({ onNavigate }: { onNavigate: (pipelineId: string) => void }) {
   const [failures, setFailures] = useState<FailureAnalysis[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<Record<string, string>>({})
+  const [severityFilter, setSeverityFilter] = useState('')
 
   useEffect(() => {
     const load = async () => {
-      try { setFailures(await api.getFailures(Object.keys(filter).length > 0 ? filter : undefined)) }
+      try { 
+        setFailures(await api.getFailures(severityFilter ? { severity: severityFilter } : undefined)) 
+      }
       catch { /* ignore */ }
       finally { setLoading(false) }
     }
     load()
-    const i = setInterval(load, 5000)
+    const i = setInterval(load, 4000)
     return () => clearInterval(i)
-  }, [filter])
+  }, [severityFilter])
 
-  if (loading) return <Loading />
+  if (loading && failures.length === 0) return <Loading />
 
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-title">AI Failure Analysis</h1>
-      </div>
-
-      <div className="filters">
-        <select className="filter-select" onChange={e => {
-          const v = e.target.value
-          setFilter(v ? { severity: v } : {})
-        }}>
-          <option value="">All Severities</option>
-          <option value="CRITICAL">Critical</option>
-          <option value="HIGH">High</option>
-          <option value="MEDIUM">Medium</option>
-          <option value="LOW">Low</option>
-        </select>
-        <select className="filter-select" onChange={e => {
-          const v = e.target.value
-          setFilter(v ? { failureType: v } : {})
-        }}>
-          <option value="">All Types</option>
-          <option value="TEST_FAILURE">Test Failure</option>
-          <option value="COMPILATION_ERROR">Compilation Error</option>
-          <option value="RUNTIME_ERROR">Runtime Error</option>
-        </select>
-      </div>
-
-      {failures.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon"><Bot size={48} /></div>
-          <p>No failure analyses yet. Trigger a failing build to see AI analysis!</p>
+        <div>
+          <h1 className="page-title">AI Neural Triage Feed</h1>
+          <p className="page-subtitle">Autonomous diagnosis of stack traces, build failures, and AST code diffs.</p>
         </div>
-      ) : (
-        <div className="table-container">
+      </div>
+
+      <div className="table-container">
+        <div className="table-toolbar">
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <select 
+              className="filter-select" 
+              value={severityFilter} 
+              onChange={e => setSeverityFilter(e.target.value)}
+            >
+              <option value="">All Severities</option>
+              <option value="CRITICAL">Critical</option>
+              <option value="HIGH">High</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="LOW">Low</option>
+            </select>
+          </div>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            {failures.length} AI analyses generated
+          </span>
+        </div>
+
+        {failures.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state-icon"><Bot size={44} /></div>
+            <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>No Build Failures Detected</p>
+            <p style={{ fontSize: 13 }}>Trigger a bug simulation on the sidebar to test AI autonomous root-cause extraction.</p>
+          </div>
+        ) : (
           <table>
             <thead>
               <tr>
                 <th>Repository</th>
                 <th>Type</th>
-                <th>Root Cause</th>
-                <th>Confidence</th>
+                <th>Root Cause Diagnosis</th>
+                <th>AI Confidence</th>
                 <th>Severity</th>
-                <th>Date</th>
+                <th>Timestamp</th>
+                <th style={{ textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {failures.map(f => (
                 <tr key={f.id} className="clickable-row" onClick={() => onNavigate(f.pipelineId)}>
-                  <td style={{ fontWeight: 600 }}>{f.repository}</td>
+                  <td style={{ fontWeight: 700, color: '#ffffff' }}>{f.repository}</td>
                   <td><span className="badge badge-failed">{f.failureType}</span></td>
-                  <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {f.rootCause?.substring(0, 80)}...
+                  <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
+                    {f.rootCause?.substring(0, 75)}...
                   </td>
                   <td>
-                    <span style={{ fontWeight: 700, color: f.confidence > 0.8 ? 'var(--accent-green)' : 'var(--accent-yellow)' }}>
-                      {(f.confidence * 100).toFixed(0)}%
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ 
+                        fontWeight: 800, 
+                        color: f.confidence > 0.8 ? 'var(--accent-green)' : 'var(--accent-yellow)',
+                        fontFamily: 'var(--font-mono)'
+                      }}>
+                        {(f.confidence * 100).toFixed(0)}%
+                      </span>
+                    </div>
                   </td>
                   <td><SeverityBadge severity={f.severity} /></td>
-                  <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{formatTime(f.createdAt)}</td>
+                  <td style={{ color: 'var(--text-muted)', fontSize: 12.5 }}>{formatTime(f.createdAt)}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--accent-cyan)' }}>
+                      Inspect HUD <ArrowUpRight size={13} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
 
 // ==================== Analysis Detail Page ====================
-function AnalysisDetailPage({ pipelineId, onBack }: { pipelineId: string; onBack: () => void }) {
+function AnalysisDetailPage({ 
+  pipelineId, 
+  onBack 
+}: { 
+  pipelineId: string; 
+  onBack: () => void;
+}) {
   const [analysis, setAnalysis] = useState<FailureAnalysis | null>(null)
   const [loading, setLoading] = useState(true)
+  const [copiedFix, setCopiedFix] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -474,13 +847,21 @@ function AnalysisDetailPage({ pipelineId, onBack }: { pipelineId: string; onBack
     return () => clearInterval(i)
   }, [pipelineId])
 
+  const handleCopyFix = () => {
+    if (!analysis?.suggestedFix) return
+    navigator.clipboard.writeText(analysis.suggestedFix)
+    setCopiedFix(true)
+    setTimeout(() => setCopiedFix(false), 2000)
+  }
+
   if (loading) return <Loading />
   if (!analysis) return (
     <div>
-      <button className="back-link" onClick={onBack}>← Back</button>
+      <button className="back-link" onClick={onBack}>← Back to Feed</button>
       <div className="empty-state">
         <div className="empty-state-icon"><Hourglass size={48} /></div>
-        <p>AI analysis is still in progress. This page will auto-refresh...</p>
+        <p style={{ fontWeight: 600, color: '#ffffff' }}>AI Neural Analysis in Progress</p>
+        <p style={{ fontSize: 13, marginTop: 4 }}>Analyzing Maven build logs, Surefire XML reports, and Git AST diff...</p>
       </div>
     </div>
   )
@@ -493,61 +874,88 @@ function AnalysisDetailPage({ pipelineId, onBack }: { pipelineId: string; onBack
 
   return (
     <div>
-      <button className="back-link" onClick={onBack}>← Back to Analysis List</button>
+      <button className="back-link" onClick={onBack}>← Back to Failure Feed</button>
 
       <div className="analysis-panel">
         <div className="analysis-header">
-          <div className="analysis-icon"><Bot size={32} /></div>
+          <div className="analysis-icon-box">
+            <Bot size={28} />
+          </div>
           <div style={{ flex: 1 }}>
-            <h2 style={{ fontSize: 22, fontWeight: 700 }}>AI Root Cause Analysis</h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-              {analysis.repository} — {analysis.commitSha?.substring(0, 7)}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <h2 style={{ fontSize: 22, fontWeight: 800, color: '#ffffff' }}>AI Root Cause Diagnosis</h2>
+              <span className="badge badge-failed">{analysis.failureType}</span>
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13.5, marginTop: 4 }}>
+              Repository: <span style={{ color: '#ffffff', fontWeight: 600 }}>{analysis.repository}</span> • Commit: <code className="commit-chip">{analysis.commitSha?.substring(0, 7)}</code>
             </p>
           </div>
           <SeverityBadge severity={analysis.severity} />
         </div>
 
-        {/* Confidence */}
-        <div className="analysis-section">
-          <div className="analysis-section-title">Confidence Score</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 28, fontWeight: 800 }}>{(confidence * 100).toFixed(0)}%</span>
-            <div className="confidence-bar" style={{ flex: 1 }}>
-              <div className={`confidence-fill ${confidenceClass}`} style={{ width: `${confidence * 100}%` }} />
-            </div>
+        {/* Confidence Widget */}
+        <div className="confidence-widget">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-muted)' }}>
+              Neural Diagnostic Confidence Score
+            </span>
+            <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#ffffff' }}>
+              {(confidence * 100).toFixed(0)}%
+            </span>
+          </div>
+          <div className="confidence-bar-bg">
+            <div className={`confidence-bar-fill ${confidenceClass}`} style={{ width: `${confidence * 100}%` }} />
           </div>
         </div>
 
-        {/* Failure Type */}
+        {/* Root Cause Card */}
         <div className="analysis-section">
-          <div className="analysis-section-title">Failure Type</div>
-          <span className="badge badge-failed" style={{ fontSize: 14, padding: '6px 16px' }}>{analysis.failureType}</span>
-        </div>
-
-        {/* Root Cause */}
-        <div className="analysis-section">
-          <div className="analysis-section-title">Root Cause</div>
-          <div className="analysis-section-content">{analysis.rootCause}</div>
+          <div className="analysis-section-title">
+            <AlertTriangle size={14} style={{ color: 'var(--accent-red)' }} /> Identified Root Cause
+          </div>
+          <div className="analysis-section-content" style={{ borderColor: 'rgba(244, 63, 94, 0.3)', background: 'rgba(244, 63, 94, 0.04)' }}>
+            <span style={{ fontWeight: 600, color: '#ffffff' }}>{analysis.rootCause}</span>
+          </div>
         </div>
 
         {/* Affected Files */}
         <div className="analysis-section">
-          <div className="analysis-section-title">Affected Files</div>
+          <div className="analysis-section-title">
+            <FileText size={14} /> Affected Files & Stack Pointers
+          </div>
           <div className="affected-files">
-            {affectedFiles.map((f, i) => <span key={i} className="file-tag">{f}</span>)}
+            {affectedFiles.map((f, i) => (
+              <span key={i} className="file-tag">
+                <Code2 size={13} /> {f}
+              </span>
+            ))}
           </div>
         </div>
 
-        {/* Explanation */}
+        {/* Detailed Explanation */}
         <div className="analysis-section">
-          <div className="analysis-section-title">Detailed Explanation</div>
-          <div className="analysis-section-content" style={{ whiteSpace: 'pre-wrap' }}>{analysis.explanation}</div>
+          <div className="analysis-section-title">
+            <Sparkles size={14} style={{ color: 'var(--accent-cyan)' }} /> Deep AST & Log Diagnostics
+          </div>
+          <div className="analysis-section-content" style={{ whiteSpace: 'pre-wrap' }}>
+            {analysis.explanation}
+          </div>
         </div>
 
-        {/* Suggested Fix */}
+        {/* Suggested AI Patch / Fix */}
         <div className="analysis-section">
-          <div className="analysis-section-title">Suggested Fix</div>
-          <div className="code-block">{analysis.suggestedFix}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div className="analysis-section-title" style={{ marginBottom: 0 }}>
+              <CheckCircle size={14} style={{ color: 'var(--accent-green)' }} /> Suggested Autonomous Code Patch
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={handleCopyFix}>
+              {copiedFix ? <Check size={13} style={{ color: 'var(--accent-green)' }} /> : <Copy size={13} />}
+              {copiedFix ? 'Copied Patch' : 'Copy Code Fix'}
+            </button>
+          </div>
+          <div className="code-block" style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: '#050912' }}>
+            {analysis.suggestedFix}
+          </div>
         </div>
       </div>
     </div>
@@ -574,35 +982,48 @@ function NotificationsPage({ onRefreshCount }: { onRefreshCount: () => void }) {
     onRefreshCount()
   }
 
-  if (loading) return <Loading />
+  if (loading && notifications.length === 0) return <Loading />
 
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-title">Notifications</h1>
+        <div>
+          <h1 className="page-title">Notification & Incident Alerts</h1>
+          <p className="page-subtitle">Real-time alerts emitted by the Notification Microservice (:8085).</p>
+        </div>
         {notifications.some(n => !n.read) && (
-          <button className="btn btn-ghost" onClick={handleMarkAllRead}>Mark All Read</button>
+          <button className="btn btn-ghost btn-sm" onClick={handleMarkAllRead}>
+            <CheckCircle size={14} /> Mark All Read
+          </button>
         )}
       </div>
+
       {notifications.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon"><Bell size={48} /></div>
-          <p>No notifications yet.</p>
+          <div className="empty-state-icon"><Bell size={44} /></div>
+          <p style={{ fontWeight: 600, color: '#ffffff' }}>No Alerts in Inbox</p>
+          <p style={{ fontSize: 13, marginTop: 4 }}>All pipelines are healthy and executing normally.</p>
         </div>
       ) : (
         <div className="notification-list">
           {notifications.map(n => (
-            <div key={n.id} className={`notification-item ${!n.read ? 'unread' : ''}`}
-                 onClick={async () => {
-                   if (!n.read) {
-                     await api.markRead(n.id)
-                     setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))
-                     onRefreshCount()
-                   }
-                 }}>
-              <div className="notification-title">{n.title}</div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4, whiteSpace: 'pre-wrap' }}>
-                {n.message?.substring(0, 200)}
+            <div 
+              key={n.id} 
+              className={`notification-item ${!n.read ? 'unread' : ''}`}
+              onClick={async () => {
+                if (!n.read) {
+                  await api.markRead(n.id)
+                  setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))
+                  onRefreshCount()
+                }
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div className="notification-title">{n.title}</div>
+                <SeverityBadge severity={n.severity || 'MEDIUM'} />
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6, whiteSpace: 'pre-wrap' }}>
+                {n.message}
               </div>
               <div className="notification-time">{formatTime(n.createdAt)}</div>
             </div>
@@ -613,37 +1034,60 @@ function NotificationsPage({ onRefreshCount }: { onRefreshCount: () => void }) {
   )
 }
 
-// ==================== Shared Components ====================
-
+// ==================== Reusable Helpers & Badges ====================
 function StatusBadge({ status }: { status: string }) {
-  const cls = `badge badge-${status.toLowerCase()}`
+  const normalized = status ? status.toUpperCase() : 'QUEUED'
   const icons: Record<string, React.ReactNode> = {
-    QUEUED: <Hourglass size={14} style={{ marginRight: 4 }} />,
-    RUNNING: <RefreshCw size={14} style={{ marginRight: 4 }} />,
-    SUCCESS: <CheckCircle size={14} style={{ marginRight: 4 }} />,
-    FAILED: <XCircle size={14} style={{ marginRight: 4 }} />,
-    ANALYZING: <Bot size={14} style={{ marginRight: 4 }} />,
-    RESOLVED: <CheckCircle size={14} style={{ marginRight: 4 }} />
+    QUEUED: <Hourglass size={12} />,
+    RUNNING: <RefreshCw size={12} className="spin-icon" />,
+    SUCCESS: <CheckCircle size={12} />,
+    FAILED: <XCircle size={12} />,
+    ANALYZING: <Bot size={12} />,
+    RESOLVED: <CheckCircle size={12} />
   }
-  return <span className={cls} style={{ display: 'inline-flex', alignItems: 'center' }}>{icons[status] || '•'} {status}</span>
+
+  let badgeClass = 'badge-queued'
+  if (normalized === 'RUNNING') badgeClass = 'badge-running'
+  else if (normalized === 'SUCCESS' || normalized === 'RESOLVED') badgeClass = 'badge-success'
+  else if (normalized === 'FAILED') badgeClass = 'badge-failed'
+  else if (normalized === 'ANALYZING') badgeClass = 'badge-analyzing'
+
+  return (
+    <span className={`badge ${badgeClass}`}>
+      {icons[normalized] || null} {normalized}
+    </span>
+  )
 }
 
 function SeverityBadge({ severity }: { severity: string }) {
-  return <span className={`badge badge-${severity?.toLowerCase()}`}>{severity}</span>
+  const norm = severity ? severity.toUpperCase() : 'LOW'
+  let cls = 'badge-low'
+  if (norm === 'CRITICAL') cls = 'badge-critical'
+  else if (norm === 'HIGH') cls = 'badge-high'
+  else if (norm === 'MEDIUM') cls = 'badge-medium'
+
+  return <span className={`badge ${cls}`}>{norm}</span>
 }
 
 function Loading() {
-  return <div className="loading"><div className="spinner" /><span>Loading...</span></div>
+  return (
+    <div className="loading">
+      <div className="spinner" />
+      <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>Syncing AI telemetry stream...</span>
+    </div>
+  )
 }
 
 function formatTime(iso: string): string {
   if (!iso) return '—'
   try {
     const d = new Date(iso)
-    return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return d.toLocaleString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit',
+      second: '2-digit'
+    })
   } catch { return iso }
-}
-
-function colorizeLog(log: string): string {
-  return log
 }
