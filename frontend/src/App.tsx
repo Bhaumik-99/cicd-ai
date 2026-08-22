@@ -1,23 +1,40 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, Pipeline, PipelineStats, FailureAnalysis, Notification } from './api'
-import { 
-  LayoutDashboard, GitBranch, Bot, History, Bell, Bug, CheckCircle, 
-  Package, TrendingUp, Timer, Rocket, XCircle, Hourglass, RefreshCw, 
-  FileText, Terminal, Copy, Check, Search, ArrowUpRight, Activity, 
-  Sparkles, Cpu, Layers, AlertTriangle, ShieldCheck, ChevronRight,
-  Code2
-} from 'lucide-react'
 
-// ==================== GitHub Icon Component ====================
-function GitHubIcon({ size = 18 }: { size?: number }) {
+// ── Scroll-reveal hook ──────────────────────────────────────────────────────
+function useReveal(ref: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { el.classList.add('visible'); obs.disconnect() } },
+      { threshold: 0.08 }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [ref])
+}
+
+function Reveal({ children, delay = 0, className = '' }: { children: React.ReactNode; delay?: number; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useReveal(ref)
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <div ref={ref} className={`reveal ${className}`} style={{ animationDelay: `${delay}ms` }}>
+      {children}
+    </div>
+  )
+}
+
+// ── GitHub SVG icon ─────────────────────────────────────────────────────────
+function GithubIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
     </svg>
   )
 }
 
-// ==================== App Main Component ====================
+// ── Main App ────────────────────────────────────────────────────────────────
 export default function App() {
   const [page, setPage] = useState<string>('dashboard')
   const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null)
@@ -27,16 +44,13 @@ export default function App() {
   const [isSimulating, setIsSimulating] = useState(false)
 
   const refreshUnread = useCallback(async () => {
-    try {
-      const data = await api.getUnreadCount()
-      setUnreadCount(data.count)
-    } catch { /* ignore */ }
+    try { setUnreadCount((await api.getUnreadCount()).count) } catch { /* ignore */ }
   }, [])
 
   useEffect(() => {
     refreshUnread()
-    const interval = setInterval(refreshUnread, 4000)
-    return () => clearInterval(interval)
+    const id = setInterval(refreshUnread, 5000)
+    return () => clearInterval(id)
   }, [refreshUnread])
 
   const showToast = (title: string, message: string, type: 'info' | 'success' | 'danger' = 'info') => {
@@ -44,17 +58,10 @@ export default function App() {
     setTimeout(() => setToast(null), 4500)
   }
 
-  const navigateToPipeline = (id: string) => {
-    setSelectedPipelineId(id)
-    setPage('pipeline-detail')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
+  const navTo = (p: string) => { setPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }) }
 
-  const navigateToAnalysis = (pipelineId: string) => {
-    setSelectedFailureId(pipelineId)
-    setPage('analysis-detail')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
+  const navigateToPipeline = (id: string) => { setSelectedPipelineId(id); navTo('pipeline-detail') }
+  const navigateToAnalysis  = (id: string) => { setSelectedFailureId(id);  navTo('analysis-detail') }
 
   const handleSimulate = async (injectBug: boolean) => {
     setIsSimulating(true)
@@ -62,186 +69,202 @@ export default function App() {
       await api.simulatePush(injectBug)
       refreshUnread()
       showToast(
-        injectBug ? 'Pipeline Failure Injected' : 'Clean Push Dispatched',
-        injectBug ? 'Simulated null pointer bug in PaymentService. AI Analyzer triggered.' : 'Simulated valid commit. Build should succeed with 100% tests.',
+        injectBug ? 'Failure injected' : 'Clean build dispatched',
+        injectBug
+          ? 'Simulated NullPointerException in PaymentService. AI triage triggered.'
+          : 'Simulated valid commit. Build should pass all checks.',
         injectBug ? 'danger' : 'success'
       )
     } catch {
-      showToast('Simulation Error', 'Failed to dispatch webhook event.', 'danger')
+      showToast('Simulation error', 'Failed to dispatch webhook event.', 'danger')
     } finally {
       setIsSimulating(false)
     }
   }
 
-  const pageNames: Record<string, string> = {
+  const pageLabel: Record<string, string> = {
     dashboard: 'Dashboard',
-    pipelines: 'Pipeline Registry',
-    'pipeline-detail': 'Pipeline Execution Details',
-    failures: 'AI Neural Triage Feed',
-    'analysis-detail': 'AI Root Cause Analysis HUD',
-    history: 'Execution History',
-    notifications: 'Notification Center'
+    pipelines: 'Pipelines',
+    'pipeline-detail': 'Pipeline Detail',
+    failures: 'AI Analysis',
+    'analysis-detail': 'Root Cause Report',
+    notifications: 'Notifications',
   }
+
+  const navItems = [
+    { key: 'dashboard',   label: 'Dashboard',    icon: 'ph-squares-four-bold' },
+    { key: 'pipelines',   label: 'Pipelines',    icon: 'ph-git-branch-bold' },
+    { key: 'failures',    label: 'AI Analysis',  icon: 'ph-brain-bold' },
+    { key: 'notifications', label: 'Alerts',     icon: 'ph-bell-bold', badge: unreadCount },
+  ]
+
+  const isActive = (key: string) =>
+    key === 'pipelines'
+      ? page === 'pipelines' || page === 'pipeline-detail'
+      : key === 'failures'
+      ? page === 'failures' || page === 'analysis-detail'
+      : page === key
 
   return (
     <div className="app-layout">
-      {/* Machined Floating Sidebar */}
+      {/* ── Sidebar ── */}
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <div className="logo-badge">
-            <Cpu size={20} />
-          </div>
-          <div className="sidebar-brand">
-            <h1>CICD-AI <span className="version-chip">v2.4</span></h1>
-            <span className="tagline">Failure Intelligence</span>
+          <div className="logo-mark">
+            <div className="logo-icon">
+              <i className="ph-circuit-board-bold" style={{ fontSize: 14 }} />
+            </div>
+            <div>
+              <div className="logo-name">CICD-AI</div>
+              <div className="logo-sub">Failure Intelligence</div>
+            </div>
           </div>
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-section-label">Core Platform</div>
-          <button className={`nav-item ${page === 'dashboard' ? 'active' : ''}`}
-                  onClick={() => setPage('dashboard')}>
-            <span className="nav-icon"><LayoutDashboard size={18} /></span>
-            <span>Dashboard</span>
-          </button>
-          <button className={`nav-item ${page === 'pipelines' || page === 'pipeline-detail' ? 'active' : ''}`}
-                  onClick={() => setPage('pipelines')}>
-            <span className="nav-icon"><GitBranch size={18} /></span>
-            <span>Pipelines</span>
-          </button>
-          <button className={`nav-item ${page === 'failures' || page === 'analysis-detail' ? 'active' : ''}`}
-                  onClick={() => setPage('failures')}>
-            <span className="nav-icon"><Bot size={18} /></span>
-            <span>AI Neural Analysis</span>
-          </button>
-          <button className={`nav-item ${page === 'history' ? 'active' : ''}`}
-                  onClick={() => setPage('history')}>
-            <span className="nav-icon"><History size={18} /></span>
-            <span>Run History</span>
-          </button>
-          <button className={`nav-item ${page === 'notifications' ? 'active' : ''}`}
-                  onClick={() => setPage('notifications')}>
-            <span className="nav-icon"><Bell size={18} /></span>
-            <span>Alerts</span>
-            {unreadCount > 0 && <span className="nav-badge">{unreadCount}</span>}
-          </button>
+          <div className="nav-section">Platform</div>
+          {navItems.map(item => (
+            <button
+              key={item.key}
+              className={`nav-item ${isActive(item.key) ? 'active' : ''}`}
+              onClick={() => navTo(item.key)}
+            >
+              <i className={item.icon} />
+              <span style={{ flex: 1 }}>{item.label}</span>
+              {(item.badge ?? 0) > 0 && (
+                <span className="nav-badge">{item.badge}</span>
+              )}
+            </button>
+          ))}
         </nav>
 
-        {/* Sidebar Telemetry, Bright GitHub Link & Quick Simulation Triggers */}
         <div className="sidebar-footer">
-          {/* Prominent GitHub Button in Sidebar */}
-          <a 
-            href="https://github.com/Bhaumik-99/cicd-ai" 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            className="btn-github"
-            style={{ width: '100%', justifyContent: 'center' }}
-          >
-            <GitHubIcon size={16} />
-            <span>GitHub Repo</span>
-            <span className="github-arrow">↗</span>
-          </a>
-
-          <div className="telemetry-card">
+          <div className="telemetry-mini">
             <div className="telemetry-row">
-              <span style={{ color: 'var(--text-muted)' }}>AI Analyzer</span>
-              <span className="telemetry-status">
-                <span className="pulse-dot" /> Online
+              <span>AI Analyzer</span>
+              <span className="telemetry-val" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span className="pulse-dot" />
+                <span style={{ color: 'var(--pale-green-ink)' }}>Online</span>
               </span>
             </div>
-            <div className="telemetry-row" style={{ marginTop: 6 }}>
-              <span style={{ color: 'var(--text-dim)' }}>Engine</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent-cyan)' }}>GPT-4o / Claude</span>
+            <div className="telemetry-row" style={{ marginTop: 4 }}>
+              <span>Engine</span>
+              <span className="telemetry-val">GPT-4o / Claude</span>
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <button 
-              className="btn btn-danger" 
-              style={{ width: '100%', fontSize: 13 }}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <button
+              className="btn btn-danger btn-sm btn-full"
               disabled={isSimulating}
               onClick={() => handleSimulate(true)}
             >
-              <Bug size={15} /> Simulate Bug Push
+              <i className="ph-bug-bold" />
+              {isSimulating ? 'Running...' : 'Inject Bug'}
             </button>
-            <button 
-              className="btn btn-ghost btn-sm" 
-              style={{ width: '100%', fontSize: 12 }}
+            <button
+              className="btn btn-success-light btn-sm btn-full"
               disabled={isSimulating}
               onClick={() => handleSimulate(false)}
             >
-              <ShieldCheck size={14} style={{ color: 'var(--accent-green)' }} /> Clean Build
+              <i className="ph-check-circle-bold" />
+              Clean Build
             </button>
           </div>
+
+          <a
+            href="https://github.com/Bhaumik-99/cicd-ai"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-github btn-full"
+            style={{ marginTop: 2 }}
+          >
+            <GithubIcon size={14} />
+            <span>GitHub Repo</span>
+            <i className="ph-arrow-up-right-bold" style={{ fontSize: 12, marginLeft: 'auto' }} />
+          </a>
         </div>
       </aside>
 
-      {/* Main Content Area */}
+      {/* ── Main ── */}
       <main className="main-content">
-        {/* Top Global Navigation Bar with Bright GitHub Link */}
-        <header className="top-nav-bar">
-          <div className="top-nav-breadcrumbs">
-            <Cpu size={16} style={{ color: 'var(--accent-cyan)' }} />
-            <span>CICD-AI Platform</span>
-            <span>/</span>
-            <span className="crumb-active">{pageNames[page] || 'Dashboard'}</span>
+        {/* Top Nav */}
+        <header className="top-nav">
+          <div className="breadcrumb">
+            <i className="ph-circuit-board-bold" style={{ fontSize: 14 }} />
+            <span>CICD-AI</span>
+            <span className="breadcrumb-sep">/</span>
+            <span className="breadcrumb-current">{pageLabel[page] ?? 'Dashboard'}</span>
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--accent-green)' }}>
+          <div className="top-nav-actions">
+            <span className="status-pill">
               <span className="pulse-dot" />
-              <span style={{ fontWeight: 600 }}>System Healthy</span>
-            </div>
-
-            {/* Bright Visible GitHub Button */}
-            <a 
-              href="https://github.com/Bhaumik-99/cicd-ai" 
-              target="_blank" 
-              rel="noopener noreferrer" 
+              All systems operational
+            </span>
+            <a
+              href="https://github.com/Bhaumik-99/cicd-ai"
+              target="_blank"
+              rel="noopener noreferrer"
               className="btn-github"
-              title="Open GitHub Repository in a new tab"
             >
-              <GitHubIcon size={17} />
+              <GithubIcon size={13} />
               <span>GitHub Repository</span>
-              <span className="github-arrow">↗</span>
+              <i className="ph-arrow-up-right-bold" style={{ fontSize: 11 }} />
             </a>
           </div>
         </header>
 
-        {page === 'dashboard' && <DashboardPage onNavigatePipeline={navigateToPipeline} onNavigateAnalysis={navigateToAnalysis} />}
-        {page === 'pipelines' && <PipelinesPage onNavigate={navigateToPipeline} onNavigateAnalysis={navigateToAnalysis} />}
-        {page === 'pipeline-detail' && selectedPipelineId &&
-          <PipelineDetailPage id={selectedPipelineId} onBack={() => setPage('pipelines')} onViewAnalysis={navigateToAnalysis} />}
-        {page === 'failures' && <FailuresPage onNavigate={navigateToAnalysis} />}
-        {page === 'analysis-detail' && selectedFailureId &&
-          <AnalysisDetailPage pipelineId={selectedFailureId} onBack={() => setPage('failures')} />}
-        {page === 'history' && <FailuresPage onNavigate={navigateToAnalysis} />}
-        {page === 'notifications' && <NotificationsPage onRefreshCount={refreshUnread} />}
+        <div className="page-content">
+          {page === 'dashboard' && (
+            <DashboardPage
+              onNavigatePipeline={navigateToPipeline}
+              onNavigateAnalysis={navigateToAnalysis}
+            />
+          )}
+          {page === 'pipelines' && (
+            <PipelinesPage
+              onNavigate={navigateToPipeline}
+              onNavigateAnalysis={navigateToAnalysis}
+            />
+          )}
+          {page === 'pipeline-detail' && selectedPipelineId && (
+            <PipelineDetailPage
+              id={selectedPipelineId}
+              onBack={() => navTo('pipelines')}
+              onViewAnalysis={navigateToAnalysis}
+            />
+          )}
+          {page === 'failures' && <FailuresPage onNavigate={navigateToAnalysis} />}
+          {page === 'analysis-detail' && selectedFailureId && (
+            <AnalysisDetailPage pipelineId={selectedFailureId} onBack={() => navTo('failures')} />
+          )}
+          {page === 'notifications' && <NotificationsPage onRefreshCount={refreshUnread} />}
+        </div>
       </main>
 
-      {/* Floating Haptic Toast */}
+      {/* Toast */}
       {toast && (
         <div className="toast">
           <div className="toast-title">
-            {toast.type === 'danger' && <AlertTriangle size={16} style={{ color: 'var(--accent-red)' }} />}
-            {toast.type === 'success' && <CheckCircle size={16} style={{ color: 'var(--accent-green)' }} />}
-            {toast.type === 'info' && <Sparkles size={16} style={{ color: 'var(--accent-cyan)' }} />}
+            {toast.type === 'danger'  && <i className="ph-warning-circle-bold t-danger" />}
+            {toast.type === 'success' && <i className="ph-check-circle-bold t-success" />}
+            {toast.type === 'info'    && <i className="ph-info-bold t-info" />}
             {toast.title}
           </div>
-          <div className="toast-message">{toast.message}</div>
+          <div className="toast-body">{toast.message}</div>
         </div>
       )}
     </div>
   )
 }
 
-// ==================== Dashboard Page ====================
-function DashboardPage({ 
-  onNavigatePipeline, 
-  onNavigateAnalysis 
-}: { 
-  onNavigatePipeline: (id: string) => void;
-  onNavigateAnalysis: (id: string) => void;
+// ── Dashboard ────────────────────────────────────────────────────────────────
+function DashboardPage({
+  onNavigatePipeline,
+  onNavigateAnalysis,
+}: {
+  onNavigatePipeline: (id: string) => void
+  onNavigateAnalysis: (id: string) => void
 }) {
   const [stats, setStats] = useState<PipelineStats | null>(null)
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
@@ -258,230 +281,163 @@ function DashboardPage({
 
   useEffect(() => {
     refresh()
-    const i = setInterval(refresh, 3500)
-    return () => clearInterval(i)
+    const id = setInterval(refresh, 4000)
+    return () => clearInterval(id)
   }, [refresh])
 
   if (loading && !stats) return <Loading />
 
+  const statCards = [
+    { label: 'Total Runs',      value: stats?.total ?? 0,      icon: 'ph-stack-bold',          iconCls: 'blue',   sub: 'All branches' },
+    { label: 'Passed',          value: stats?.successful ?? 0,  icon: 'ph-check-circle-bold',   iconCls: 'green',  sub: 'All checks green' },
+    { label: 'Failed',          value: stats?.failed ?? 0,      icon: 'ph-x-circle-bold',       iconCls: 'red',    sub: 'Triggered AI triage' },
+    { label: 'AI Resolved',     value: stats?.resolved ?? 0,    icon: 'ph-brain-bold',          iconCls: 'blue',   sub: 'Root causes found' },
+    { label: 'Failure Rate',    value: `${stats?.failureRate ?? 0}%`, icon: 'ph-chart-line-up-bold', iconCls: 'yellow', sub: 'Current interval' },
+    { label: 'Avg Build Time',  value: stats?.averageBuildTimeMs ? `${(stats.averageBuildTimeMs / 1000).toFixed(1)}s` : '—',
+                                       icon: 'ph-timer-bold',          iconCls: 'yellow', sub: 'End-to-end latency' },
+  ]
+
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Executive Telemetry</h1>
-          <p className="page-subtitle">Real-time pipeline diagnostics, autonomous AI root-cause analysis & metrics.</p>
-        </div>
-        <div className="header-actions">
+      <Reveal>
+        <div className="page-header">
+          <div>
+            <div className="page-eyebrow">Overview</div>
+            <h1 className="page-title">Pipeline Dashboard</h1>
+            <p className="page-subtitle">
+              Real-time build telemetry, AI-powered failure diagnosis, and system health.
+            </p>
+          </div>
           <button className="btn btn-ghost btn-sm" onClick={refresh}>
-            <RefreshCw size={14} /> Live Sync
+            <i className="ph-arrows-clockwise-bold" /> Refresh
           </button>
         </div>
+      </Reveal>
+
+      {/* Stats bento */}
+      <div className="bento-grid">
+        {statCards.map((s, i) => (
+          <Reveal key={s.label} delay={i * 60} className="bento-card">
+            <div className="stat-eyebrow">
+              {s.label}
+              <div className={`stat-icon ${s.iconCls}`}>
+                <i className={s.icon} />
+              </div>
+            </div>
+            <div className="stat-num">{s.value}</div>
+            <div className="stat-sub">{s.sub}</div>
+          </Reveal>
+        ))}
       </div>
 
-      {/* Interactive Microservice Pipeline Flow (DAG) */}
-      <div className="dag-container">
-        <div className="dag-title-bar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Activity size={16} style={{ color: 'var(--accent-cyan)' }} />
-            <span style={{ fontSize: 12.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-secondary)' }}>
-              Live Microservice Topology Flow
+      {/* DAG */}
+      <Reveal>
+        <div className="dag-wrap">
+          <div className="dag-label-bar">
+            <span className="dag-label-title">
+              <i className="ph-git-merge-bold" style={{ marginRight: 6 }} />
+              Microservice Event Flow
+            </span>
+            <span className="badge badge-running">
+              <i className="ph-lightning-bold" />
+              Kafka KRaft
             </span>
           </div>
-          <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-green)' }}>
-            ● EVENT_DRIVEN_KAFKA_BUS
-          </span>
-        </div>
-
-        <div className="dag-steps">
-          <div className="dag-node active">
-            <div className="dag-circle"><GitBranch size={18} /></div>
-            <span className="dag-label">Git Push</span>
-            <span className="dag-port">GitHub / GitLab</span>
-          </div>
-          <div className="dag-connector active" />
-
-          <div className="dag-node active">
-            <div className="dag-circle"><Rocket size={18} /></div>
-            <span className="dag-label">Webhook</span>
-            <span className="dag-port">Port :8081</span>
-          </div>
-          <div className="dag-connector active" />
-
-          <div className="dag-node active">
-            <div className="dag-circle"><Layers size={18} /></div>
-            <span className="dag-label">Build Worker</span>
-            <span className="dag-port">Port :8083</span>
-          </div>
-          <div className="dag-connector active" />
-
-          <div className={`dag-node ${(stats?.failed ?? 0) > 0 ? 'failed' : 'success'}`}>
-            <div className="dag-circle"><Code2 size={18} /></div>
-            <span className="dag-label">Maven Tests</span>
-            <span className="dag-port">JUnit / Surefire</span>
-          </div>
-          <div className="dag-connector active" />
-
-          <div className="dag-node active">
-            <div className="dag-circle"><Bot size={18} /></div>
-            <span className="dag-label">AI Analyzer</span>
-            <span className="dag-port">Port :8084</span>
-          </div>
-          <div className="dag-connector active" />
-
-          <div className="dag-node success">
-            <div className="dag-circle"><Bell size={18} /></div>
-            <span className="dag-label">Notifier</span>
-            <span className="dag-port">Port :8085</span>
+          <div className="dag-flow">
+            {[
+              { label: 'Git Push',      meta: 'GitHub',    icon: 'ph-git-branch-bold', cls: 'active' },
+              { label: 'Webhook',       meta: ':8081',      icon: 'ph-webhook-logo-bold', cls: 'active' },
+              { label: 'Build Worker',  meta: ':8083',      icon: 'ph-wrench-bold', cls: 'active' },
+              { label: 'Maven Tests',   meta: 'JUnit',      icon: 'ph-test-tube-bold',
+                cls: (stats?.failed ?? 0) > 0 ? 'failed' : 'success' },
+              { label: 'AI Analyzer',   meta: ':8084',      icon: 'ph-brain-bold', cls: 'active' },
+              { label: 'Notifier',      meta: ':8086',      icon: 'ph-bell-ringing-bold', cls: 'success' },
+            ].map((node, i, arr) => (
+              <span key={node.label} style={{ display: 'flex', alignItems: 'center', flex: i < arr.length - 1 ? undefined : 0 }}>
+                <div className={`dag-node ${node.cls}`}>
+                  <div className="dag-circle"><i className={node.icon} /></div>
+                  <span className="dag-node-name">{node.label}</span>
+                  <span className="dag-node-meta">{node.meta}</span>
+                </div>
+                {i < arr.length - 1 && <div className={`dag-edge ${node.cls}`} />}
+              </span>
+            ))}
           </div>
         </div>
-      </div>
+      </Reveal>
 
-      {/* KPI Stats Grid */}
-      <div className="stats-grid">
-        <div className="stat-card blue">
-          <div className="stat-header">
-            <span className="stat-label">Total Executions</span>
-            <div className="stat-icon"><Package size={18} /></div>
+      {/* Recent pipelines */}
+      <Reveal>
+        <div className="table-wrap">
+          <div className="table-toolbar">
+            <div className="table-toolbar-title">
+              <i className="ph-git-branch-bold" />
+              Recent Executions
+            </div>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Auto-refreshing</span>
           </div>
-          <div className="stat-value">{stats?.total ?? 0}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Across all branches</div>
-        </div>
-
-        <div className="stat-card green">
-          <div className="stat-header">
-            <span className="stat-label">Successful Builds</span>
-            <div className="stat-icon"><CheckCircle size={18} /></div>
-          </div>
-          <div className="stat-value">{stats?.successful ?? 0}</div>
-          <div style={{ fontSize: 11, color: 'var(--accent-green)', marginTop: 4 }}>Passing all checks</div>
-        </div>
-
-        <div className="stat-card red">
-          <div className="stat-header">
-            <span className="stat-label">Failed Runs</span>
-            <div className="stat-icon"><XCircle size={18} /></div>
-          </div>
-          <div className="stat-value">{stats?.failed ?? 0}</div>
-          <div style={{ fontSize: 11, color: 'var(--accent-red)', marginTop: 4 }}>Triggered AI triage</div>
-        </div>
-
-        <div className="stat-card yellow">
-          <div className="stat-header">
-            <span className="stat-label">Failure Rate</span>
-            <div className="stat-icon"><TrendingUp size={18} /></div>
-          </div>
-          <div className="stat-value">{stats?.failureRate ?? 0}%</div>
-          <div style={{ fontSize: 11, color: 'var(--accent-yellow)', marginTop: 4 }}>Current interval</div>
-        </div>
-
-        <div className="stat-card purple">
-          <div className="stat-header">
-            <span className="stat-label">Avg Execution</span>
-            <div className="stat-icon"><Timer size={18} /></div>
-          </div>
-          <div className="stat-value">
-            {stats?.averageBuildTimeMs ? `${(stats.averageBuildTimeMs / 1000).toFixed(1)}s` : '3.2s'}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--accent-purple)', marginTop: 4 }}>End-to-end latency</div>
-        </div>
-
-        <div className="stat-card blue">
-          <div className="stat-header">
-            <span className="stat-label">AI Diagnosed</span>
-            <div className="stat-icon"><Bot size={18} /></div>
-          </div>
-          <div className="stat-value">{stats?.resolved ?? 0}</div>
-          <div style={{ fontSize: 11, color: 'var(--accent-cyan)', marginTop: 4 }}>Root causes found</div>
-        </div>
-      </div>
-
-      {/* Recent Pipelines Table */}
-      <div className="table-container">
-        <div className="table-toolbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <GitBranch size={18} style={{ color: 'var(--accent-cyan)' }} />
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>Recent Pipeline Executions</h3>
-          </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Auto-refreshing live data</span>
-        </div>
-
-        {pipelines.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon"><Rocket size={44} /></div>
-            <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>No Pipelines In Queue</p>
-            <p style={{ fontSize: 13 }}>Click "Simulate Bug Push" on the left panel to trigger an autonomous demo flow.</p>
-          </div>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Repository</th>
-                <th>Branch</th>
-                <th>Commit</th>
-                <th>Status</th>
-                <th>Duration</th>
-                <th>Timestamp</th>
-                <th style={{ textAlign: 'right' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pipelines.map(p => (
-                <tr key={p.id} className="clickable-row" onClick={() => onNavigatePipeline(p.id)}>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 700, color: '#ffffff' }}>{p.repository}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <span className="branch-badge">
-                      <GitBranch size={12} /> {p.branch}
-                    </span>
-                  </td>
-                  <td>
-                    <span className="commit-chip">{p.commitSha?.substring(0, 7)}</span>
-                  </td>
-                  <td><StatusBadge status={p.status} /></td>
-                  <td>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-                      {p.durationMs ? `${(p.durationMs / 1000).toFixed(1)}s` : 'Running...'}
-                    </span>
-                  </td>
-                  <td style={{ color: 'var(--text-muted)', fontSize: 12.5 }}>{formatTime(p.createdAt)}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    {(p.status === 'FAILED' || p.status === 'RESOLVED' || p.status === 'ANALYZING') ? (
-                      <button 
-                        className="btn btn-ghost btn-sm" 
-                        style={{ color: 'var(--accent-cyan)', borderColor: 'rgba(56, 189, 248, 0.3)' }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onNavigateAnalysis(p.id)
-                        }}
-                      >
-                        <Bot size={13} /> AI Diagnosis
-                      </button>
-                    ) : (
-                      <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>
-                        <ChevronRight size={16} />
-                      </span>
-                    )}
-                  </td>
+          {pipelines.length === 0 ? (
+            <EmptyState
+              icon="ph-rocket-launch-bold"
+              title="No pipelines yet"
+              desc='Click "Inject Bug" in the sidebar to trigger a demo pipeline run.'
+            />
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Repository</th>
+                  <th>Branch</th>
+                  <th>Commit</th>
+                  <th>Status</th>
+                  <th>Duration</th>
+                  <th>Started</th>
+                  <th style={{ textAlign: 'right' }}>Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {pipelines.map(p => (
+                  <tr key={p.id} className="row-clickable" onClick={() => onNavigatePipeline(p.id)}>
+                    <td style={{ fontWeight: 600, color: 'var(--ink)' }}>{p.repository}</td>
+                    <td><span className="branch-tag"><i className="ph-git-branch-bold" /> {p.branch}</span></td>
+                    <td><span className="commit-tag">{p.commitSha?.substring(0, 7)}</span></td>
+                    <td><StatusBadge status={p.status} /></td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                      {p.durationMs ? `${(p.durationMs / 1000).toFixed(1)}s` : '—'}
+                    </td>
+                    <td style={{ color: 'var(--muted)', fontSize: 12 }}>{formatTime(p.createdAt)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      {(p.status === 'FAILED' || p.status === 'RESOLVED' || p.status === 'ANALYZING') ? (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={e => { e.stopPropagation(); onNavigateAnalysis(p.id) }}
+                        >
+                          <i className="ph-brain-bold" /> AI Report
+                        </button>
+                      ) : (
+                        <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); onNavigatePipeline(p.id) }}>
+                          Details <i className="ph-arrow-right-bold" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Reveal>
     </div>
   )
 }
 
-// ==================== Pipelines Page ====================
-function PipelinesPage({ 
-  onNavigate, 
-  onNavigateAnalysis 
-}: { 
-  onNavigate: (id: string) => void;
-  onNavigateAnalysis: (id: string) => void;
+// ── Pipelines Page ───────────────────────────────────────────────────────────
+function PipelinesPage({
+  onNavigate,
+  onNavigateAnalysis,
+}: {
+  onNavigate: (id: string) => void
+  onNavigateAnalysis: (id: string) => void
 }) {
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
   const [loading, setLoading] = useState(true)
@@ -489,155 +445,156 @@ function PipelinesPage({
   const [statusFilter, setStatusFilter] = useState('ALL')
 
   const load = useCallback(async () => {
-    try { 
-      setPipelines(await api.getPipelines()) 
-    } catch { /* ignore */ }
+    try { setPipelines(await api.getPipelines()) } catch { /* ignore */ }
     finally { setLoading(false) }
   }, [])
 
   useEffect(() => {
     load()
-    const i = setInterval(load, 3500)
-    return () => clearInterval(i)
+    const id = setInterval(load, 4000)
+    return () => clearInterval(id)
   }, [load])
 
   const filtered = pipelines.filter(p => {
-    const matchesSearch = 
-      p.repository.toLowerCase().includes(search.toLowerCase()) ||
-      p.branch.toLowerCase().includes(search.toLowerCase()) ||
-      p.commitSha.toLowerCase().includes(search.toLowerCase()) ||
-      (p.author && p.author.toLowerCase().includes(search.toLowerCase()))
-    const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter
-    return matchesSearch && matchesStatus
+    const q = search.toLowerCase()
+    const matchSearch =
+      p.repository.toLowerCase().includes(q) ||
+      p.branch.toLowerCase().includes(q) ||
+      p.commitSha.toLowerCase().includes(q) ||
+      (p.author && p.author.toLowerCase().includes(q))
+    const matchStatus = statusFilter === 'ALL' || p.status === statusFilter
+    return matchSearch && matchStatus
   })
 
   if (loading && pipelines.length === 0) return <Loading />
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Pipeline Registry</h1>
-          <p className="page-subtitle">Complete registry of all CI/CD workflows, build logs, and test executions.</p>
-        </div>
-      </div>
-
-      <div className="table-container">
-        <div className="table-toolbar">
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div className="search-box">
-              <Search size={15} style={{ color: 'var(--text-muted)' }} />
-              <input 
-                type="text" 
-                className="search-input" 
-                placeholder="Search repo, branch, SHA..." 
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
-            <select 
-              className="filter-select" 
-              value={statusFilter} 
-              onChange={e => setStatusFilter(e.target.value)}
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="SUCCESS">Success</option>
-              <option value="FAILED">Failed</option>
-              <option value="RESOLVED">AI Resolved</option>
-              <option value="RUNNING">Running</option>
-              <option value="QUEUED">Queued</option>
-            </select>
+      <Reveal>
+        <div className="page-header">
+          <div>
+            <div className="page-eyebrow">CI/CD</div>
+            <h1 className="page-title">Pipeline Registry</h1>
+            <p className="page-subtitle">All CI/CD workflow runs, build logs, and test execution records.</p>
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Showing {filtered.length} of {pipelines.length} pipelines
-          </span>
         </div>
+      </Reveal>
 
-        <table>
-          <thead>
-            <tr>
-              <th>Repository</th>
-              <th>Branch</th>
-              <th>Commit</th>
-              <th>Author</th>
-              <th>Status</th>
-              <th>Duration</th>
-              <th>Created</th>
-              <th style={{ textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(p => (
-              <tr key={p.id} className="clickable-row" onClick={() => onNavigate(p.id)}>
-                <td style={{ fontWeight: 700, color: '#ffffff' }}>{p.repository}</td>
-                <td>
-                  <span className="branch-badge">
-                    <GitBranch size={12} /> {p.branch}
-                  </span>
-                </td>
-                <td><span className="commit-chip">{p.commitSha?.substring(0, 7)}</span></td>
-                <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{p.author}</td>
-                <td><StatusBadge status={p.status} /></td>
-                <td>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-                    {p.durationMs ? `${(p.durationMs / 1000).toFixed(1)}s` : '—'}
-                  </span>
-                </td>
-                <td style={{ color: 'var(--text-muted)', fontSize: 12.5 }}>{formatTime(p.createdAt)}</td>
-                <td style={{ textAlign: 'right' }}>
-                  {(p.status === 'FAILED' || p.status === 'RESOLVED') ? (
-                    <button 
-                      className="btn btn-ghost btn-sm" 
-                      style={{ color: 'var(--accent-cyan)' }}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onNavigateAnalysis(p.id)
-                      }}
-                    >
-                      <Bot size={13} /> AI Fix
-                    </button>
-                  ) : (
-                    <button className="btn btn-ghost btn-sm" onClick={() => onNavigate(p.id)}>
-                      Details <ChevronRight size={13} />
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Reveal>
+        <div className="table-wrap">
+          <div className="table-toolbar">
+            <div className="table-toolbar-title">
+              <i className="ph-list-bullets-bold" />
+              All Pipelines
+            </div>
+            <div className="table-toolbar-right">
+              <div className="search-wrap">
+                <i className="ph-magnifying-glass-bold search-icon" />
+                <input
+                  className="search-input"
+                  type="text"
+                  placeholder="Search repo, branch, SHA..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                />
+              </div>
+              <select
+                className="filter-select"
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+              >
+                <option value="ALL">All statuses</option>
+                <option value="SUCCESS">Passed</option>
+                <option value="FAILED">Failed</option>
+                <option value="RESOLVED">AI Resolved</option>
+                <option value="RUNNING">Running</option>
+                <option value="QUEUED">Queued</option>
+              </select>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                {filtered.length} / {pipelines.length}
+              </span>
+            </div>
+          </div>
+
+          {filtered.length === 0 ? (
+            <EmptyState icon="ph-funnel-bold" title="No results" desc="Try adjusting the search term or status filter." />
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Repository</th>
+                  <th>Branch</th>
+                  <th>Commit</th>
+                  <th>Author</th>
+                  <th>Status</th>
+                  <th>Duration</th>
+                  <th>Created</th>
+                  <th style={{ textAlign: 'right' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(p => (
+                  <tr key={p.id} className="row-clickable" onClick={() => onNavigate(p.id)}>
+                    <td style={{ fontWeight: 600, color: 'var(--ink)' }}>{p.repository}</td>
+                    <td><span className="branch-tag"><i className="ph-git-branch-bold" /> {p.branch}</span></td>
+                    <td><span className="commit-tag">{p.commitSha?.substring(0, 7)}</span></td>
+                    <td style={{ color: 'var(--muted)', fontSize: 13 }}>{p.author}</td>
+                    <td><StatusBadge status={p.status} /></td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                      {p.durationMs ? `${(p.durationMs / 1000).toFixed(1)}s` : '—'}
+                    </td>
+                    <td style={{ color: 'var(--muted)', fontSize: 12 }}>{formatTime(p.createdAt)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      {(p.status === 'FAILED' || p.status === 'RESOLVED') ? (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={e => { e.stopPropagation(); onNavigateAnalysis(p.id) }}
+                        >
+                          <i className="ph-brain-bold" /> AI Report
+                        </button>
+                      ) : (
+                        <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); onNavigate(p.id) }}>
+                          Details <i className="ph-arrow-right-bold" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Reveal>
     </div>
   )
 }
 
-// ==================== Pipeline Detail Page ====================
-function PipelineDetailPage({ 
-  id, 
-  onBack, 
-  onViewAnalysis 
-}: { 
-  id: string; 
-  onBack: () => void; 
-  onViewAnalysis: (id: string) => void;
+// ── Pipeline Detail ──────────────────────────────────────────────────────────
+function PipelineDetailPage({
+  id,
+  onBack,
+  onViewAnalysis,
+}: {
+  id: string
+  onBack: () => void
+  onViewAnalysis: (id: string) => void
 }) {
   const [pipeline, setPipeline] = useState<Pipeline | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
-  const [logFilter, setLogFilter] = useState('')
+  const [logSearch, setLogSearch] = useState('')
 
   useEffect(() => {
     const load = async () => {
-      try { setPipeline(await api.getPipeline(id)) }
-      catch { /* ignore */ }
+      try { setPipeline(await api.getPipeline(id)) } catch { /* ignore */ }
       finally { setLoading(false) }
     }
     load()
-    const i = setInterval(load, 3000)
-    return () => clearInterval(i)
+    const interval = setInterval(load, 3000)
+    return () => clearInterval(interval)
   }, [id])
 
-  const handleCopyLog = () => {
+  const handleCopy = () => {
     if (!pipeline?.buildLog) return
     navigator.clipboard.writeText(pipeline.buildLog)
     setCopied(true)
@@ -646,142 +603,152 @@ function PipelineDetailPage({
 
   if (loading || !pipeline) return <Loading />
 
+  const isFailed = pipeline.status === 'FAILED' || pipeline.status === 'RESOLVED' || pipeline.status === 'ANALYZING'
+  const logLines = (pipeline.buildLog ?? '').split('\n')
+  const filteredLines = logSearch
+    ? logLines.filter(l => l.toLowerCase().includes(logSearch.toLowerCase()))
+    : logLines
+
+  const dagStages = [
+    { label: 'Git Checkout',  meta: 'Completed',                                                icon: 'ph-git-branch-bold',     cls: 'success' },
+    { label: 'Compile',       meta: 'Java 21 / Maven',                                          icon: 'ph-wrench-bold',          cls: 'success' },
+    { label: 'Tests',         meta: isFailed ? '1 Failed' : 'All Passed',                       icon: 'ph-test-tube-bold',       cls: isFailed ? 'failed' : 'success' },
+    { label: 'AI Diagnostic', meta: isFailed ? 'Root cause analyzed' : 'Skipped (clean)',       icon: 'ph-brain-bold',           cls: isFailed ? 'active' : 'success' },
+  ]
+
   return (
     <div>
       <button className="back-link" onClick={onBack}>
-        ← Back to Registry
+        <i className="ph-arrow-left-bold" /> Back to Pipelines
       </button>
 
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">{pipeline.repository}</h1>
-          <p className="page-subtitle">
-            Branch: <span style={{ color: '#ffffff' }}>{pipeline.branch}</span> • Commit: <code className="commit-chip">{pipeline.commitSha}</code>
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          {(pipeline.status === 'FAILED' || pipeline.status === 'ANALYZING' || pipeline.status === 'RESOLVED') && (
+      <Reveal>
+        <div className="page-header">
+          <div>
+            <div className="page-eyebrow">Pipeline Detail</div>
+            <h1 className="page-title">{pipeline.repository}</h1>
+            <p className="page-subtitle">
+              Branch <span className="branch-tag"><i className="ph-git-branch-bold" /> {pipeline.branch}</span>{' '}
+              &nbsp;Commit <span className="commit-tag">{pipeline.commitSha?.substring(0, 7)}</span>
+            </p>
+          </div>
+          {isFailed && (
             <button className="btn btn-primary" onClick={() => onViewAnalysis(pipeline.id)}>
-              <Bot size={16} /> View AI Root-Cause Analysis
+              <i className="ph-brain-bold" /> View AI Root-Cause Report
             </button>
           )}
         </div>
-      </div>
+      </Reveal>
 
-      {/* Pipeline Stage Visualizer */}
-      <div className="dag-container" style={{ marginBottom: 24 }}>
-        <div className="dag-title-bar">
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1 }}>
-            Pipeline Execution Pipeline DAG
-          </span>
-          <StatusBadge status={pipeline.status} />
-        </div>
-        <div className="dag-steps">
-          <div className="dag-node success">
-            <div className="dag-circle"><GitBranch size={16} /></div>
-            <span className="dag-label">Git Checkout</span>
-            <span className="dag-port">Completed</span>
+      {/* DAG */}
+      <Reveal>
+        <div className="dag-wrap" style={{ marginBottom: 24 }}>
+          <div className="dag-label-bar">
+            <span className="dag-label-title">Execution Stages</span>
+            <StatusBadge status={pipeline.status} />
           </div>
-          <div className="dag-connector active" />
-
-          <div className="dag-node success">
-            <div className="dag-circle"><Layers size={16} /></div>
-            <span className="dag-label">Compile</span>
-            <span className="dag-port">Java 21 / Maven</span>
-          </div>
-          <div className="dag-connector active" />
-
-          <div className={`dag-node ${pipeline.status === 'FAILED' || pipeline.status === 'RESOLVED' ? 'failed' : 'success'}`}>
-            <div className="dag-circle"><Code2 size={16} /></div>
-            <span className="dag-label">Surefire Tests</span>
-            <span className="dag-port">{pipeline.status === 'FAILED' || pipeline.status === 'RESOLVED' ? '1 Failure' : 'All Passed'}</span>
-          </div>
-          <div className="dag-connector active" />
-
-          <div className={`dag-node ${pipeline.status === 'SUCCESS' ? 'success' : 'active'}`}>
-            <div className="dag-circle"><Bot size={16} /></div>
-            <span className="dag-label">AI Diagnostic</span>
-            <span className="dag-port">{pipeline.status === 'FAILED' || pipeline.status === 'RESOLVED' ? 'Root Cause Analyzed' : 'Skipped (Clean)'}</span>
+          <div className="dag-flow">
+            {dagStages.map((node, i) => (
+              <span key={node.label} style={{ display: 'flex', alignItems: 'center' }}>
+                <div className={`dag-node ${node.cls}`}>
+                  <div className="dag-circle"><i className={node.icon} /></div>
+                  <span className="dag-node-name">{node.label}</span>
+                  <span className="dag-node-meta">{node.meta}</span>
+                </div>
+                {i < dagStages.length - 1 && <div className={`dag-edge ${node.cls}`} />}
+              </span>
+            ))}
           </div>
         </div>
-      </div>
+      </Reveal>
 
-      {/* Metadata Detail Grid */}
-      <div className="detail-grid">
-        <div className="detail-item">
-          <div className="detail-label">Repository</div>
-          <div className="detail-value">{pipeline.repository}</div>
+      {/* Metadata detail cards */}
+      <Reveal>
+        <div className="detail-grid">
+          {[
+            { label: 'Repository', value: pipeline.repository },
+            { label: 'Branch',     value: pipeline.branch },
+            { label: 'Author',     value: pipeline.author || '—' },
+            { label: 'Status',     value: <StatusBadge status={pipeline.status} /> },
+            { label: 'Duration',   value: pipeline.durationMs ? `${(pipeline.durationMs / 1000).toFixed(1)}s` : 'In progress' },
+            { label: 'Started',    value: formatTime(pipeline.createdAt) },
+          ].map(d => (
+            <div key={d.label} className="detail-card">
+              <div className="detail-card-label">{d.label}</div>
+              <div className="detail-card-value">{d.value}</div>
+            </div>
+          ))}
         </div>
-        <div className="detail-item">
-          <div className="detail-label">Branch</div>
-          <div className="detail-value">{pipeline.branch}</div>
-        </div>
-        <div className="detail-item">
-          <div className="detail-label">Author</div>
-          <div className="detail-value">{pipeline.author}</div>
-        </div>
-        <div className="detail-item">
-          <div className="detail-label">Duration</div>
-          <div className="detail-value">{pipeline.durationMs ? `${(pipeline.durationMs / 1000).toFixed(1)}s` : 'In progress'}</div>
-        </div>
-      </div>
+      </Reveal>
 
-      {/* Test Results Banner */}
+      {/* Test results */}
       {pipeline.testResults && (
-        <div className="bezel-card" style={{ marginBottom: 20 }}>
-          <div className="card-header">
-            <div className="card-title">
-              <FileText size={15} style={{ color: 'var(--accent-cyan)' }} /> Test Execution Summary
+        <Reveal>
+          <div className="table-wrap" style={{ marginBottom: 20 }}>
+            <div className="table-toolbar">
+              <div className="table-toolbar-title">
+                <i className="ph-flask-bold" /> Test Execution Summary
+              </div>
+            </div>
+            <div style={{ padding: '16px 20px' }}>
+              <div className={`code-block ${isFailed ? 'log-line-error' : 'log-line-info'}`} style={{ fontSize: 12.5 }}>
+                {pipeline.testResults}
+              </div>
             </div>
           </div>
-          <div className="card-padding">
-            <div className="code-block" style={{ color: pipeline.status === 'FAILED' || pipeline.status === 'RESOLVED' ? '#fb7185' : '#34d399' }}>
-              {pipeline.testResults}
-            </div>
-          </div>
-        </div>
+        </Reveal>
       )}
 
-      {/* Terminal Build Log Viewer */}
+      {/* Build log terminal */}
       {pipeline.buildLog && (
-        <div className="terminal-block">
-          <div className="terminal-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div className="terminal-controls">
-                <span className="term-dot red" />
-                <span className="term-dot yellow" />
-                <span className="term-dot green" />
+        <Reveal>
+          <div className="terminal-wrap">
+            <div className="terminal-titlebar" style={{ position: 'relative' }}>
+              <div className="terminal-dots">
+                <span className="term-dot" />
+                <span className="term-dot" />
+                <span className="term-dot" />
               </div>
-              <span className="terminal-title">console.stdout — maven build output</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button className="btn btn-ghost btn-sm" onClick={handleCopyLog}>
-                {copied ? <Check size={13} style={{ color: 'var(--accent-green)' }} /> : <Copy size={13} />}
-                {copied ? 'Copied' : 'Copy Log'}
-              </button>
-            </div>
-          </div>
-          <div className="log-viewer">
-            {pipeline.buildLog.split('\n').map((line, idx) => {
-              const isErr = line.includes('[ERROR]') || line.includes('FAILURE') || line.includes('NullPointerException')
-              const isInfo = line.includes('[INFO]')
-              return (
-                <div key={idx} className={isErr ? 'log-line-error' : isInfo ? 'log-line-info' : ''}>
-                  <span style={{ color: 'var(--text-dim)', marginRight: 12, userSelect: 'none', fontSize: 11 }}>
-                    {(idx + 1).toString().padStart(3, ' ')}
-                  </span>
-                  {line}
+              <span className="terminal-fname">console.stdout — maven build</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="search-wrap">
+                  <i className="ph-magnifying-glass-bold search-icon" />
+                  <input
+                    className="search-input"
+                    type="text"
+                    placeholder="Filter lines..."
+                    value={logSearch}
+                    onChange={e => setLogSearch(e.target.value)}
+                    style={{ width: 140 }}
+                  />
                 </div>
-              )
-            })}
+                <button className="btn btn-ghost btn-sm" onClick={handleCopy}>
+                  <i className={copied ? 'ph-check-bold' : 'ph-copy-bold'} />
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+            <div className="terminal-body">
+              {filteredLines.map((line, idx) => {
+                const isErr = line.includes('[ERROR]') || line.includes('FAILURE') || line.includes('NullPointerException')
+                const isInfo = line.includes('[INFO]')
+                return (
+                  <span key={idx} className={`log-line ${isErr ? 'log-line-error' : isInfo ? 'log-line-info' : ''}`}>
+                    <span className="log-num">{(idx + 1).toString().padStart(3, ' ')}</span>
+                    {line}
+                    {'\n'}
+                  </span>
+                )
+              })}
+            </div>
           </div>
-        </div>
+        </Reveal>
       )}
     </div>
   )
 }
 
-// ==================== Failures / AI Analysis Page ====================
+// ── Failures / AI Analysis List ──────────────────────────────────────────────
 function FailuresPage({ onNavigate }: { onNavigate: (pipelineId: string) => void }) {
   const [failures, setFailures] = useState<FailureAnalysis[]>([])
   const [loading, setLoading] = useState(true)
@@ -789,110 +756,119 @@ function FailuresPage({ onNavigate }: { onNavigate: (pipelineId: string) => void
 
   useEffect(() => {
     const load = async () => {
-      try { 
-        setFailures(await api.getFailures(severityFilter ? { severity: severityFilter } : undefined)) 
-      }
-      catch { /* ignore */ }
+      try {
+        setFailures(await api.getFailures(severityFilter ? { severity: severityFilter } : undefined))
+      } catch { /* ignore */ }
       finally { setLoading(false) }
     }
     load()
-    const i = setInterval(load, 4000)
-    return () => clearInterval(i)
+    const id = setInterval(load, 4000)
+    return () => clearInterval(id)
   }, [severityFilter])
 
   if (loading && failures.length === 0) return <Loading />
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">AI Neural Triage Feed</h1>
-          <p className="page-subtitle">Autonomous diagnosis of stack traces, build failures, and AST code diffs.</p>
-        </div>
-      </div>
-
-      <div className="table-container">
-        <div className="table-toolbar">
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <select 
-              className="filter-select" 
-              value={severityFilter} 
-              onChange={e => setSeverityFilter(e.target.value)}
-            >
-              <option value="">All Severities</option>
-              <option value="CRITICAL">Critical</option>
-              <option value="HIGH">High</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="LOW">Low</option>
-            </select>
+      <Reveal>
+        <div className="page-header">
+          <div>
+            <div className="page-eyebrow">AI Intelligence</div>
+            <h1 className="page-title">Failure Analysis Feed</h1>
+            <p className="page-subtitle">
+              Autonomous diagnosis of build failures — stack traces, error logs, and AI-generated fixes.
+            </p>
           </div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {failures.length} AI analyses generated
-          </span>
         </div>
+      </Reveal>
 
-        {failures.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon"><Bot size={44} /></div>
-            <p style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>No Build Failures Detected</p>
-            <p style={{ fontSize: 13 }}>Trigger a bug simulation on the sidebar to test AI autonomous root-cause extraction.</p>
+      <Reveal>
+        <div className="table-wrap">
+          <div className="table-toolbar">
+            <div className="table-toolbar-title">
+              <i className="ph-brain-bold" />
+              AI Diagnoses
+            </div>
+            <div className="table-toolbar-right">
+              <select
+                className="filter-select"
+                value={severityFilter}
+                onChange={e => setSeverityFilter(e.target.value)}
+              >
+                <option value="">All severities</option>
+                <option value="CRITICAL">Critical</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+              </select>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                {failures.length} records
+              </span>
+            </div>
           </div>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Repository</th>
-                <th>Type</th>
-                <th>Root Cause Diagnosis</th>
-                <th>AI Confidence</th>
-                <th>Severity</th>
-                <th>Timestamp</th>
-                <th style={{ textAlign: 'right' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {failures.map(f => (
-                <tr key={f.id} className="clickable-row" onClick={() => onNavigate(f.pipelineId)}>
-                  <td style={{ fontWeight: 700, color: '#ffffff' }}>{f.repository}</td>
-                  <td><span className="badge badge-failed">{f.failureType}</span></td>
-                  <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
-                    {f.rootCause?.substring(0, 75)}...
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ 
-                        fontWeight: 800, 
-                        color: f.confidence > 0.8 ? 'var(--accent-green)' : 'var(--accent-yellow)',
-                        fontFamily: 'var(--font-mono)'
+
+          {failures.length === 0 ? (
+            <EmptyState
+              icon="ph-brain-bold"
+              title="No failures detected"
+              desc='Trigger "Inject Bug" in the sidebar to run a simulated failure and watch the AI diagnose it.'
+            />
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Repository</th>
+                  <th>Type</th>
+                  <th>Root Cause</th>
+                  <th>Confidence</th>
+                  <th>Severity</th>
+                  <th>Time</th>
+                  <th style={{ textAlign: 'right' }}>Report</th>
+                </tr>
+              </thead>
+              <tbody>
+                {failures.map(f => (
+                  <tr key={f.id} className="row-clickable" onClick={() => onNavigate(f.pipelineId)}>
+                    <td style={{ fontWeight: 600, color: 'var(--ink)' }}>{f.repository}</td>
+                    <td><span className="badge badge-failed">{f.failureType}</span></td>
+                    <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--ink-2)' }}>
+                      {f.rootCause?.substring(0, 70)}...
+                    </td>
+                    <td>
+                      <span style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 700,
+                        fontSize: 13,
+                        color: f.confidence > 0.8 ? 'var(--pale-green-ink)' : 'var(--pale-yellow-ink)',
                       }}>
                         {(f.confidence * 100).toFixed(0)}%
                       </span>
-                    </div>
-                  </td>
-                  <td><SeverityBadge severity={f.severity} /></td>
-                  <td style={{ color: 'var(--text-muted)', fontSize: 12.5 }}>{formatTime(f.createdAt)}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--accent-cyan)' }}>
-                      Inspect HUD <ArrowUpRight size={13} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+                    </td>
+                    <td><SeverityBadge severity={f.severity} /></td>
+                    <td style={{ color: 'var(--muted)', fontSize: 12 }}>{formatTime(f.createdAt)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn btn-ghost btn-sm">
+                        View <i className="ph-arrow-up-right-bold" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Reveal>
     </div>
   )
 }
 
-// ==================== Analysis Detail Page ====================
-function AnalysisDetailPage({ 
-  pipelineId, 
-  onBack 
-}: { 
-  pipelineId: string; 
-  onBack: () => void;
+// ── Analysis Detail Page ─────────────────────────────────────────────────────
+function AnalysisDetailPage({
+  pipelineId,
+  onBack,
+}: {
+  pipelineId: string
+  onBack: () => void
 }) {
   const [analysis, setAnalysis] = useState<FailureAnalysis | null>(null)
   const [loading, setLoading] = useState(true)
@@ -900,145 +876,156 @@ function AnalysisDetailPage({
 
   useEffect(() => {
     const load = async () => {
-      try { setAnalysis(await api.getFailureByPipeline(pipelineId)) }
-      catch { /* ignore */ }
+      try { setAnalysis(await api.getFailureByPipeline(pipelineId)) } catch { /* ignore */ }
       finally { setLoading(false) }
     }
     load()
-    const i = setInterval(load, 3000)
-    return () => clearInterval(i)
+    const id = setInterval(load, 3000)
+    return () => clearInterval(id)
   }, [pipelineId])
 
+  if (loading) return <Loading />
+  if (!analysis) return (
+    <div>
+      <button className="back-link" onClick={onBack}><i className="ph-arrow-left-bold" /> Back</button>
+      <EmptyState
+        icon="ph-hourglass-medium-bold"
+        title="Analysis in progress"
+        desc="The AI is reading build logs, Surefire XML reports, and stack traces. This usually takes a few seconds."
+      />
+    </div>
+  )
+
+  const conf = analysis.confidence
+  const confCls = conf > 0.8 ? 'high' : conf > 0.5 ? 'medium' : 'low'
+  let affectedFiles: string[] = []
+  try { affectedFiles = JSON.parse(analysis.affectedFiles) } catch { affectedFiles = [analysis.affectedFiles] }
+
   const handleCopyFix = () => {
-    if (!analysis?.suggestedFix) return
+    if (!analysis.suggestedFix) return
     navigator.clipboard.writeText(analysis.suggestedFix)
     setCopiedFix(true)
     setTimeout(() => setCopiedFix(false), 2000)
   }
 
-  if (loading) return <Loading />
-  if (!analysis) return (
-    <div>
-      <button className="back-link" onClick={onBack}>← Back to Feed</button>
-      <div className="empty-state">
-        <div className="empty-state-icon"><Hourglass size={48} /></div>
-        <p style={{ fontWeight: 600, color: '#ffffff' }}>AI Neural Analysis in Progress</p>
-        <p style={{ fontSize: 13, marginTop: 4 }}>Analyzing Maven build logs, Surefire XML reports, and Git AST diff...</p>
-      </div>
-    </div>
-  )
-
-  const confidence = analysis.confidence
-  const confidenceClass = confidence > 0.8 ? 'confidence-high' : confidence > 0.5 ? 'confidence-medium' : 'confidence-low'
-
-  let affectedFiles: string[] = []
-  try { affectedFiles = JSON.parse(analysis.affectedFiles) } catch { affectedFiles = [analysis.affectedFiles] }
-
   return (
     <div>
-      <button className="back-link" onClick={onBack}>← Back to Failure Feed</button>
+      <button className="back-link" onClick={onBack}>
+        <i className="ph-arrow-left-bold" /> Back to Failure Feed
+      </button>
 
-      <div className="analysis-panel">
-        <div className="analysis-header">
-          <div className="analysis-icon-box">
-            <Bot size={28} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <h2 style={{ fontSize: 22, fontWeight: 800, color: '#ffffff' }}>AI Root Cause Diagnosis</h2>
-              <span className="badge badge-failed">{analysis.failureType}</span>
-            </div>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 13.5, marginTop: 4 }}>
-              Repository: <span style={{ color: '#ffffff', fontWeight: 600 }}>{analysis.repository}</span> • Commit: <code className="commit-chip">{analysis.commitSha?.substring(0, 7)}</code>
+      <Reveal>
+        <div className="page-header">
+          <div>
+            <div className="page-eyebrow">AI Root-Cause Report</div>
+            <h1 className="page-title">{analysis.repository}</h1>
+            <p className="page-subtitle">
+              Branch <span className="branch-tag"><i className="ph-git-branch-bold" /> {analysis.branch}</span>{' '}
+              &nbsp;Commit <span className="commit-tag">{analysis.commitSha?.substring(0, 7)}</span>
             </p>
           </div>
-          <SeverityBadge severity={analysis.severity} />
-        </div>
-
-        {/* Confidence Widget */}
-        <div className="confidence-widget">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-muted)' }}>
-              Neural Diagnostic Confidence Score
-            </span>
-            <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#ffffff' }}>
-              {(confidence * 100).toFixed(0)}%
-            </span>
-          </div>
-          <div className="confidence-bar-bg">
-            <div className={`confidence-bar-fill ${confidenceClass}`} style={{ width: `${confidence * 100}%` }} />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <SeverityBadge severity={analysis.severity} />
+            <span className="badge badge-failed">{analysis.failureType}</span>
           </div>
         </div>
+      </Reveal>
 
-        {/* Root Cause Card */}
-        <div className="analysis-section">
-          <div className="analysis-section-title">
-            <AlertTriangle size={14} style={{ color: 'var(--accent-red)' }} /> Identified Root Cause
+      {/* Confidence */}
+      <Reveal>
+        <div className="conf-wrap">
+          <div className="conf-header">
+            <span className="conf-label">AI Diagnostic Confidence</span>
+            <span className="conf-value">{(conf * 100).toFixed(0)}%</span>
           </div>
-          <div className="analysis-section-content" style={{ borderColor: 'rgba(244, 63, 94, 0.3)', background: 'rgba(244, 63, 94, 0.04)' }}>
-            <span style={{ fontWeight: 600, color: '#ffffff' }}>{analysis.rootCause}</span>
+          <div className="conf-track">
+            <div className={`conf-fill ${confCls}`} style={{ width: `${conf * 100}%` }} />
           </div>
         </div>
+      </Reveal>
 
-        {/* Affected Files */}
-        <div className="analysis-section">
-          <div className="analysis-section-title">
-            <FileText size={14} /> Affected Files & Stack Pointers
-          </div>
-          <div className="affected-files">
-            {affectedFiles.map((f, i) => (
-              <span key={i} className="file-tag">
-                <Code2 size={13} /> {f}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Detailed Explanation */}
-        <div className="analysis-section">
-          <div className="analysis-section-title">
-            <Sparkles size={14} style={{ color: 'var(--accent-cyan)' }} /> Deep AST & Log Diagnostics
-          </div>
-          <div className="analysis-section-content" style={{ whiteSpace: 'pre-wrap' }}>
-            {analysis.explanation}
-          </div>
-        </div>
-
-        {/* Suggested AI Patch / Fix */}
-        <div className="analysis-section">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <div className="analysis-section-title" style={{ marginBottom: 0 }}>
-              <CheckCircle size={14} style={{ color: 'var(--accent-green)' }} /> Suggested Autonomous Code Patch
+      <Reveal>
+        <div className="analysis-wrap">
+          {/* Header */}
+          <div className="analysis-hdr">
+            <div className="analysis-icon">
+              <i className="ph-brain-bold" />
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={handleCopyFix}>
-              {copiedFix ? <Check size={13} style={{ color: 'var(--accent-green)' }} /> : <Copy size={13} />}
-              {copiedFix ? 'Copied Patch' : 'Copy Code Fix'}
-            </button>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--ink)' }}>AI Root Cause Analysis</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
+                Analyzed build logs, Surefire XML, and stack trace
+              </div>
+            </div>
           </div>
-          <div className="code-block" style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: '#050912' }}>
-            {analysis.suggestedFix}
+
+          {/* Root cause */}
+          <div className="analysis-section">
+            <div className="analysis-section-title">
+              <i className="ph-warning-circle-bold" style={{ color: 'var(--pale-red-ink)' }} />
+              Root Cause
+            </div>
+            <div className="analysis-root-cause">{analysis.rootCause}</div>
+          </div>
+
+          {/* Affected files */}
+          <div className="analysis-section">
+            <div className="analysis-section-title">
+              <i className="ph-file-code-bold" />
+              Affected Files
+            </div>
+            <div className="file-list">
+              {affectedFiles.map((f, i) => (
+                <span key={i} className="file-tag">
+                  <i className="ph-file-code-bold" /> {f}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Explanation */}
+          <div className="analysis-section">
+            <div className="analysis-section-title">
+              <i className="ph-magnifying-glass-bold" />
+              Detailed Diagnostic
+            </div>
+            <div className="analysis-body">{analysis.explanation}</div>
+          </div>
+
+          {/* Suggested fix */}
+          <div className="analysis-section">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div className="analysis-section-title" style={{ marginBottom: 0 }}>
+                <i className="ph-wrench-bold" style={{ color: 'var(--pale-green-ink)' }} />
+                Suggested Code Fix
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={handleCopyFix}>
+                <i className={copiedFix ? 'ph-check-bold' : 'ph-copy-bold'} />
+                {copiedFix ? 'Copied' : 'Copy Fix'}
+              </button>
+            </div>
+            <div className="code-block">{analysis.suggestedFix}</div>
           </div>
         </div>
-      </div>
+      </Reveal>
     </div>
   )
 }
 
-// ==================== Notifications Page ====================
+// ── Notifications Page ───────────────────────────────────────────────────────
 function NotificationsPage({ onRefreshCount }: { onRefreshCount: () => void }) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const load = async () => {
-      try { setNotifications(await api.getNotifications()) }
-      catch { /* ignore */ }
+      try { setNotifications(await api.getNotifications()) } catch { /* ignore */ }
       finally { setLoading(false) }
     }
     load()
   }, [])
 
-  const handleMarkAllRead = async () => {
+  const handleMarkAll = async () => {
     await api.markAllRead()
     setNotifications(prev => prev.map(n => ({ ...n, read: true })))
     onRefreshCount()
@@ -1048,94 +1035,104 @@ function NotificationsPage({ onRefreshCount }: { onRefreshCount: () => void }) {
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Notification & Incident Alerts</h1>
-          <p className="page-subtitle">Real-time alerts emitted by the Notification Microservice (:8085).</p>
+      <Reveal>
+        <div className="page-header">
+          <div>
+            <div className="page-eyebrow">Alerts</div>
+            <h1 className="page-title">Notification Center</h1>
+            <p className="page-subtitle">Real-time alerts from the Notification microservice (:8086).</p>
+          </div>
+          {notifications.some(n => !n.read) && (
+            <button className="btn btn-ghost btn-sm" onClick={handleMarkAll}>
+              <i className="ph-check-circle-bold" /> Mark all read
+            </button>
+          )}
         </div>
-        {notifications.some(n => !n.read) && (
-          <button className="btn btn-ghost btn-sm" onClick={handleMarkAllRead}>
-            <CheckCircle size={14} /> Mark All Read
-          </button>
-        )}
-      </div>
+      </Reveal>
 
-      {notifications.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon"><Bell size={44} /></div>
-          <p style={{ fontWeight: 600, color: '#ffffff' }}>No Alerts in Inbox</p>
-          <p style={{ fontSize: 13, marginTop: 4 }}>All pipelines are healthy and executing normally.</p>
-        </div>
-      ) : (
-        <div className="notification-list">
-          {notifications.map(n => (
-            <div 
-              key={n.id} 
-              className={`notification-item ${!n.read ? 'unread' : ''}`}
-              onClick={async () => {
-                if (!n.read) {
-                  await api.markRead(n.id)
-                  setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))
-                  onRefreshCount()
-                }
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div className="notification-title">{n.title}</div>
-                <SeverityBadge severity={n.severity || 'MEDIUM'} />
+      <Reveal>
+        {notifications.length === 0 ? (
+          <EmptyState
+            icon="ph-bell-simple-slash-bold"
+            title="No alerts"
+            desc="All pipelines are healthy. Alerts appear here when a build fails or the AI completes an analysis."
+          />
+        ) : (
+          <div className="notif-list">
+            {notifications.map(n => (
+              <div
+                key={n.id}
+                className={`notif-item ${!n.read ? 'unread' : ''}`}
+                onClick={async () => {
+                  if (!n.read) {
+                    await api.markRead(n.id)
+                    setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))
+                    onRefreshCount()
+                  }
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                    <div className="notif-title">{n.title}</div>
+                    <SeverityBadge severity={n.severity || 'MEDIUM'} />
+                  </div>
+                  <div className="notif-body">{n.message}</div>
+                  <div className="notif-time">{formatTime(n.createdAt)}</div>
+                </div>
               </div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6, whiteSpace: 'pre-wrap' }}>
-                {n.message}
-              </div>
-              <div className="notification-time">{formatTime(n.createdAt)}</div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </Reveal>
     </div>
   )
 }
 
-// ==================== Reusable Helpers & Badges ====================
+// ── Reusable helpers ─────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
-  const normalized = status ? status.toUpperCase() : 'QUEUED'
-  const icons: Record<string, React.ReactNode> = {
-    QUEUED: <Hourglass size={12} />,
-    RUNNING: <RefreshCw size={12} className="spin-icon" />,
-    SUCCESS: <CheckCircle size={12} />,
-    FAILED: <XCircle size={12} />,
-    ANALYZING: <Bot size={12} />,
-    RESOLVED: <CheckCircle size={12} />
+  const s = (status ?? 'QUEUED').toUpperCase()
+  const map: Record<string, { cls: string; icon: string }> = {
+    QUEUED:    { cls: 'badge-queued',    icon: 'ph-hourglass-bold' },
+    RUNNING:   { cls: 'badge-running',   icon: 'ph-arrows-clockwise-bold' },
+    SUCCESS:   { cls: 'badge-success',   icon: 'ph-check-circle-bold' },
+    FAILED:    { cls: 'badge-failed',    icon: 'ph-x-circle-bold' },
+    ANALYZING: { cls: 'badge-analyzing', icon: 'ph-brain-bold' },
+    RESOLVED:  { cls: 'badge-resolved',  icon: 'ph-check-circle-bold' },
   }
-
-  let badgeClass = 'badge-queued'
-  if (normalized === 'RUNNING') badgeClass = 'badge-running'
-  else if (normalized === 'SUCCESS' || normalized === 'RESOLVED') badgeClass = 'badge-success'
-  else if (normalized === 'FAILED') badgeClass = 'badge-failed'
-  else if (normalized === 'ANALYZING') badgeClass = 'badge-analyzing'
-
+  const { cls, icon } = map[s] ?? { cls: 'badge-queued', icon: 'ph-hourglass-bold' }
   return (
-    <span className={`badge ${badgeClass}`}>
-      {icons[normalized] || null} {normalized}
+    <span className={`badge ${cls}`}>
+      <i className={icon} /> {s}
     </span>
   )
 }
 
 function SeverityBadge({ severity }: { severity: string }) {
-  const norm = severity ? severity.toUpperCase() : 'LOW'
-  let cls = 'badge-low'
-  if (norm === 'CRITICAL') cls = 'badge-critical'
-  else if (norm === 'HIGH') cls = 'badge-high'
-  else if (norm === 'MEDIUM') cls = 'badge-medium'
+  const s = (severity ?? 'LOW').toUpperCase()
+  const map: Record<string, string> = {
+    CRITICAL: 'badge-critical',
+    HIGH:     'badge-high',
+    MEDIUM:   'badge-medium',
+    LOW:      'badge-low',
+  }
+  return <span className={`badge ${map[s] ?? 'badge-low'}`}>{s}</span>
+}
 
-  return <span className={`badge ${cls}`}>{norm}</span>
+function EmptyState({ icon, title, desc }: { icon: string; title: string; desc: string }) {
+  return (
+    <div className="empty-state">
+      <i className={`${icon} empty-icon`} />
+      <div className="empty-title">{title}</div>
+      <div className="empty-desc">{desc}</div>
+    </div>
+  )
 }
 
 function Loading() {
   return (
-    <div className="loading">
+    <div className="loading-screen">
       <div className="spinner" />
-      <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>Syncing AI telemetry stream...</span>
+      <span style={{ fontSize: 13, color: 'var(--muted)' }}>Loading data...</span>
     </div>
   )
 }
@@ -1143,13 +1140,9 @@ function Loading() {
 function formatTime(iso: string): string {
   if (!iso) return '—'
   try {
-    const d = new Date(iso)
-    return d.toLocaleString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      hour: '2-digit', 
-      minute: '2-digit',
-      second: '2-digit'
+    return new Date(iso).toLocaleString('en-US', {
+      month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
     })
   } catch { return iso }
 }
